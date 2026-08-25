@@ -1,7 +1,7 @@
 # docker compose up -d --build
 #
-# On Unraid this works through the Compose Manager plugin; the Docker tab wants
-# unraid-template.xml instead, or an "Add Container" filled in by hand.
+# Any Docker host will do. unraid-template.xml is there for that platform's
+# own container UI, which wants a template rather than a compose file.
 
 services:
   eclipse-mapper:

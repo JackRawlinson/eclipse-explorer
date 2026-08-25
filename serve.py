@@ -28,8 +28,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("port", nargs="?", type=int, default=8000)
     ap.add_argument("--bind", default="0.0.0.0",
-                    help="address to listen on; pass a Tailscale IP to keep it "
-                         "off the local network")
+                    help="address to listen on; the default accepts connections on "
+                         "any interface")
     args = ap.parse_args()
 
     root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "public")

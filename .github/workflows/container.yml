@@ -1,9 +1,9 @@
-# Builds the container and pushes it to GitHub's own registry, so Unraid (or
-# anything else) can pull it instead of building it.
+# Builds the container and pushes it to GitHub's own registry, so a server can
+# pull it instead of building it.
 #
 # After the first successful run the package is PRIVATE. Make it public once —
 # repo → Packages → eclipse-explorer → Package settings → Change visibility —
-# or Unraid will need registry credentials to pull.
+# or pulling it will need registry credentials.
 
 name: container
 
@@ -68,7 +68,7 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: linux/amd64          # Unraid is x86-64
+          platforms: linux/amd64          # typical server target
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
