@@ -270,7 +270,7 @@ function showCircumstances(lngLat) {
 }
 
 function circumstancesHTML(s, lngLat) {
-  const where = `<p class="pop__where">${formatLatLon(lngLat.lat, lngLat.lng)}</p>`;
+  const where = `<p class="pop__where">${formatLatLon(lngLat.lat, lngLat.lng, 3)}</p>`;
   if (!s) {
     return `<p class="pop__head pop__head--none">No eclipse here</p>
             <p class="pop__note">The Sun is either untouched or below the horizon
@@ -553,10 +553,10 @@ function formatDuration(seconds) {
   return m ? `${m}m ${String(s).padStart(2, '0')}s` : `${s}s`;
 }
 
-function formatLatLon(lat, lon) {
+function formatLatLon(lat, lon, dp = 1) {
   const ns = lat >= 0 ? 'N' : 'S';
   const ew = lon >= 0 ? 'E' : 'W';
-  return `${Math.abs(lat).toFixed(1)}°${ns} ${Math.abs(lon).toFixed(1)}°${ew}`;
+  return `${Math.abs(lat).toFixed(dp)}°${ns} ${Math.abs(lon).toFixed(dp)}°${ew}`;
 }
 
 const signed = (v, dp) => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(dp);
