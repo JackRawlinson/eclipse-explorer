@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Eclipse Mapper — solar eclipse paths 1900–2100</title>
+<meta name="description" content="Every solar eclipse from 1900 to 2100 on an interactive map. Paths of totality and annularity computed from NASA's Besselian elements. No ads, no tracking.">
+<meta name="color-scheme" content="light dark">
+<link rel="stylesheet" href="vendor/maplibre-gl.css">
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='11' fill='%23fbbf24'/><circle cx='11' cy='14' r='11' fill='%230f172a'/></svg>">
+</head>
+<body>
+
+<div id="map" role="application" aria-label="Map of solar eclipse paths"></div>
+
+<div class="rail">
+
+<section class="panel panel--picker" id="picker">
+  <header class="panel__head">
+    <h1 class="panel__title">Solar eclipses</h1>
+    <span class="panel__range" id="range">1900–2100</span>
+    <button class="panel__toggle" type="button" data-panel="picker" aria-expanded="true">
+      <span class="visually-hidden">Collapse eclipse list</span><span aria-hidden="true"></span>
+    </button>
+  </header>
+
+  <div class="panel__body">
+    <div class="stepper">
+      <button type="button" id="prev" class="stepper__btn" title="Previous eclipse (←)">
+        <span class="visually-hidden">Previous eclipse</span><span aria-hidden="true">‹</span>
+      </button>
+      <output class="stepper__now" id="stepper-now">—</output>
+      <button type="button" id="next" class="stepper__btn" title="Next eclipse (→)">
+        <span class="visually-hidden">Next eclipse</span><span aria-hidden="true">›</span>
+      </button>
+    </div>
+
+    <label class="search">
+      <span class="visually-hidden">Search eclipses</span>
+      <input type="search" id="search" placeholder="Year, date or saros…" autocomplete="off" spellcheck="false">
+    </label>
+
+    <div class="chips" id="chips" role="group" aria-label="Filter by eclipse type"></div>
+
+    <p class="list__count" id="count" aria-live="polite"></p>
+    <ul class="list" id="list" tabindex="-1"></ul>
+  </div>
+</section>
+
+<section class="panel panel--info" id="info">
+  <header class="panel__head">
+    <h2 class="panel__title" id="info-title">Details</h2>
+    <button class="panel__toggle" type="button" data-panel="info" aria-expanded="true">
+      <span class="visually-hidden">Collapse details</span><span aria-hidden="true"></span>
+    </button>
+  </header>
+
+  <div class="panel__body">
+    <div id="facts"></div>
+
+    <h3 class="legend__title">Legend</h3>
+    <ul class="legend" id="legend">
+      <li data-key="total"><i class="sw sw--total"></i>Path of totality</li>
+      <li data-key="annular"><i class="sw sw--annular"></i>Path of annularity</li>
+      <li data-key="central"><i class="sw sw--central"></i>Central line</li>
+      <li data-key="penumbra"><i class="sw sw--penumbra"></i>Partial eclipse visible</li>
+      <li data-key="band"><i class="sw sw--band"></i>% of the Sun covered</li>
+      <li data-key="greatest"><i class="sw sw--greatest"></i>Greatest eclipse</li>
+      <li data-key="marks"><i class="sw sw--marks"></i>Shadow centre, 30 min UT</li>
+    </ul>
+
+    <p class="hint">Click anywhere on the map for local times and how much of the Sun goes.</p>
+
+    <p class="credit">
+      Eclipse Predictions by Fred Espenak, NASA’s GSFC.
+      Paths computed from the Besselian elements of the
+      <a href="https://eclipse.gsfc.nasa.gov/SEpubs/5MCSE.html" rel="noopener">Five Millennium Canon of Solar Eclipses</a>.
+    </p>
+  </div>
+</section>
+
+</div><!-- .rail -->
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

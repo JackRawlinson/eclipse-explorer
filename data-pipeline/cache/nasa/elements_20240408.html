@@ -1,0 +1,463 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml">
+
+<head>
+  <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+  <meta name="author" content="F. Espenak and Xavier Jubier" />
+  <meta name="keywords" content="eclipse, solar" />
+  <meta name="description" content="This is part of NASA's official eclipse home page. It plots solar eclipse paths on maps." />
+  
+  <script src='https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js'></script>
+  <link href='https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css' rel='stylesheet' />
+  <style>
+    #map { width: 725px; height: 500px; }
+    .maplibregl-popup {
+      max-width: none !important; /* Override the default max-width */
+      font: 12px/20px 'Helvetica Neue', Arial, Helvetica, sans-serif;
+    }
+    .maplibregl-popup-content {
+      width: auto;
+      min-width: 200px;
+    }
+  </style>
+
+ <script type="text/javascript">  //<![CDATA[  var elements = new Array(  2460409.26, 18.0, -3.0, 3.0,   74.0,   -0.31824401,   0.51171160,   0.00003260,  -0.00000842,    0.21976399,   0.27095890,  -0.00005950,  -0.00000466,    7.58620024,   0.01484400,  -0.00000200,   89.59121704,  15.00407982,   0.00000000,    0.53581399,   0.00006180,  -0.00001280,   -0.01027200,   0.00006150,  -0.00001270,    0.00466830,   0.00464500  );  //]]> </script>  <title>NASA - Total Solar Eclipse of 2024 April 08</title>
+
+  <script type="text/javascript" src="../style/header.js"></script>  
+
+  <!--  ##### JAVASCRIPT TO COMPUTE LOCAL CIRCUMSTANCES GOES HERE #####  -->
+  <script type="text/javascript" src="../SEgoogle/SEcirc_bryan-maplibre.js"></script>
+  
+  <!-- Load the eclipse path loader script -->
+  <script type="text/javascript" src="eclipse-path-loader.js"></script>
+  
+  <!-- Function to load eclipse path data -->
+  <script type="text/javascript">
+  //<![CDATA[
+  // Function to load eclipse path data
+  function loadEclipsePath(map) {
+    // Use the AJAX-based loader instead of script tag
+    loadEclipsePathData(map, '+20240408', '0.5', {
+      disableAutoCenter: true // Prevent the map from automatically centering on the eclipse path
+    });
+  }
+  //]]>
+  </script>
+</head>
+
+<!--  ++++++++++++++++++++++++++++++++++++++++++++++++++  -->
+
+<body class="lnfiveon">
+<script language="JavaScript" type="text/javascript" src="../style/highlighter.js"></script>
+
+<script language="JavaScript" type="text/javascript" src="../style/navbar.js"></script>
+<noscript>
+<h1><a href="http://www.nasa.gov/">NASA (National Aeronautics and Space Administration)</a></h1>
+<ul>
+  <li id="one"><a href="../eclipse.html"><span>Home</span></a></li>
+  <li id="two"><a href="../solar.html"><span>Solar Eclipses</span></a></li>
+  <li id="three"><a href="../lunar.html"><span>Lunar Eclipses</span></a></li>
+  <li id="four"><a href="../transit/transit.html"><span>Planetary Transits</span></a></li>
+  <li id="five"><a href="../phase/phase2001gmt.html"><span>Moon Phases</span></a></li>
+</ul>
+<h1><a href="../eclipse.html">Eclipse Web Site</a></h1>
+<h2>by Fred Espenak, GSFC Planetary Systems Laboratory</h2>
+</noscript>
+
+<div id="contentwrapper">
+<div id="singlecolumn">
+
+<!--  ##### PAGE TITLE GOES HERE #####  -->
+<h1 class="box">Total Solar Eclipse of 2024 April 08</h1>
+
+<h2 class="box"><strong>Interactive Eclipse Path Using MapLibre</strong></h2>
+
+<p style="font-style: italic;">Your web browser must have Javascript turned on. The following browsers have been successfully tested with <strong>MapLibre</strong>:
+  <ul>
+  <li><strong>Macintosh</strong> - Firefox 52+, Chrome 60+, Safari 11+, Opera 48+</li>
+  <li><strong>Windows</strong> - Firefox 52+, Chrome 60+, Edge 16+, Opera 48+</li>
+  <li><strong>Linux</strong> - Firefox 52+, Chrome 60+</li>
+  <li><strong>iOS</strong> - Safari Mobile 11+, Chrome 60+</li>
+  <li><strong>Android</strong> - Android 5.0+, Firefox 52+, Chrome 60+</li>
+  </ul>
+</p>
+
+<!-- ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ -->
+<hr class="blue" />
+<h4>Introduction</h4>
+
+<p class="quote">This map shows the path of the solar eclipse across Earth's surface. 
+The northern and southern path limits are blue and the central line is red.
+The navigation controls (upper right corner) are for zooming in and out and rotating the map. 
+The scale control (bottom left) shows the current map scale.
+The map uses OpenFreeMap tiles for a clean, detailed view of the Earth's surface.
+</p>
+
+<!--  ++++++++++++++++++++++++++++++++++++++++++++++++++  -->
+
+<div id="map" style="width: 725px; height: 500px"></div>
+            <table border="0" cellspacing="0" cellpadding="0" style="width: 725px;">
+            <tr>
+            <td style="width: 60%; text-align: left; vertical-align: top;">
+            </td>
+            <td style="width: 25%; text-align: left; vertical-align: top;">
+            </td>
+            <td style="width: 15%; text-align: right; vertical-align: top;">
+            </td>
+            </tr>
+            </table>
+<p class="quote">See <a href="SEdata.php?Ecl=+20240408">Eclipse Data, including the Besselian elements, for the 2024 April 08 solar eclipse</a>.</p>
+
+<!--  ++++++++++++++++++++++++++++++++++++++++++++++++++  -->
+<p class="quote">
+Click anywhere on the map to calculate eclipse times there.
+For more information, see <a href="../SEgoogleinfo.html">Instructions</a>.
+</p>
+<!--  ++++++++++++++++++++++++++++++++++++++++++++++++++  -->
+
+<hr class="blue" />
+
+<h2>Acknowledgments</h2>
+
+<p class="quote">This MapLibre implementation (path computations, local circumstances and cursor position) is based on <strong>Xavier Jubier</strong>'s <a href="http://xjubier.free.fr/en/site_pages/solar_eclipses/5MCSE/xSE_Five_Millennium_Canon.html" target="_blank">Five Millennium Canon of Solar Eclipses Web Tool</a>.</p>
+
+<p class="quote">Special thanks to National Space Club summer intern <strong>Sumit Dutta</strong> for his assistance in preparing the original solar eclipse mapper (July 2007).</p>
+
+<p class="quote">This implementation uses <a href="https://maplibre.org/" target="_blank">MapLibre GL JS</a>, an open-source JavaScript library for interactive maps, and <a href="https://openfreemap.org/" target="_blank">OpenFreeMap</a> for map tiles.</p>
+
+<p class="quote">These eclipse predictions were generated for the Moon's center of mass using the
+  <a href="../SEcat5/ephemeris.html">VSOP87/ELP2000-82 ephemerides</a>
+  and a value of &Delta;T = 74 s.
+The resulting Besselian elements are the same as those used by the <a href="../SEpubs/5MCSE.html">Five Millennium Canon of Solar Eclipses</a>.</p>
+
+<hr class="blue" />
+
+<h4 style="text-align: center;">Return to <a href="SEsearch.php">Solar Eclipse Search Engine</a></h4>
+
+<hr class="blue" />
+
+<p class="quote">For information on reproducting eclipse data, see <a href="../SEpubs/copyright.html">NASA Copyright Information</a>.</p>
+
+<p class="quote">Permission is freely granted to reproduce this data when accompanied by an acknowledgment:</p>
+
+<p style="text-align: center;">"Eclipse Predictions by Fred Espenak (NASA's GSFC)"</p>
+
+<script language="JavaScript" type="text/javascript">
+//<![CDATA[
+  document.write('</div>');
+//]]>
+</script>
+</div>
+</div>
+
+<script language="JavaScript" type="text/javascript" src="../style/footer-1.js"></script>
+2026 Aug 14<script language="JavaScript" type="text/javascript" src="../style/footer-2.js"></script>
+
+<!-- Define initMap function and add the load event listener at the end of the body -->
+<script type="text/javascript">
+//<![CDATA[
+// --- WebGL capability gate -------------------------------------------------
+// MapLibre GL draws exclusively through WebGL and ships no software renderer,
+// so a browser that cannot hand out a WebGL context can never display this
+// map. Detect that before construction and say so plainly, rather than letting
+// the constructor throw and spilling a raw GPU attribute blob onto the page.
+//
+// Note: maplibregl.supported() does NOT exist here. It was removed in MapLibre
+// GL JS 3.0 and this page pins 3.6.2, so the canvas is probed directly.
+function hasWebGL() {
+    try {
+        var canvas = document.createElement('canvas');
+        return !!(canvas.getContext('webgl2') ||
+                  canvas.getContext('webgl') ||
+                  canvas.getContext('experimental-webgl'));
+    } catch (e) {
+        return false;
+    }
+}
+
+function isWebGLError(error) {
+    var message = (error && error.message) ? String(error.message) : '';
+    return message.toLowerCase().indexOf('webgl') !== -1;
+}
+
+// Shown when the map cannot be drawn. Deliberately not styled as an error:
+// nothing is broken server-side and every number the visitor came for is still
+// available, so the page points at the data rather than alarming them.
+//
+// The underlying error is logged to the console and never rendered. Firefox's
+// WebGL failure message leads with a JSON dump of requested context attributes,
+// which is meaningless to a visitor and is the exact output this replaces.
+function showMapUnavailable(reason) {
+    var mapDiv = document.getElementById('map');
+    if (!mapDiv) { return; }
+
+    if (reason) {
+        console.error('Map unavailable, underlying error:', reason);
+    }
+
+    mapDiv.innerHTML =
+        '<div style="padding: 20px; background-color: #f4f4f4; border: 1px solid #cccccc; border-radius: 5px;">' +
+        '<h3 style="margin-top: 0;">Interactive map unavailable</h3>' +
+        '<p>This map is drawn using WebGL, which your browser has not made available. ' +
+        'The eclipse data itself is unaffected.</p>' +
+        '<p><strong><a href="SEdata.php?Ecl=+20240408">' +
+        'View the full data for this eclipse, including the Besselian elements' +
+        '</a></strong></p>' +
+        '<p style="font-size: 90%; color: #555555;">' +
+        'To enable WebGL: in Firefox, open <em>about:support</em> and check the Graphics ' +
+        'section, or turn on hardware acceleration under Settings &rarr; General &rarr; ' +
+        'Performance. In Chrome or Edge, check <em>chrome://gpu</em>. Some privacy ' +
+        'settings and browser extensions also block WebGL.</p>' +
+        '</div>';
+}
+
+// Define initMap function directly on the window object
+window.initMap = function() {
+    console.log('initMap function called');
+    try {
+        // Validate Besselian data
+        if (typeof elements === 'undefined') {
+            console.error('Missing Besselian data - elements variable is undefined');
+            throw new Error('Missing Besselian data - elements variable is undefined');
+        }
+
+        // Check if elements array has the expected length
+        if (!Array.isArray(elements) || elements.length < 27) {
+            console.error('Invalid Besselian data - elements array is incomplete');
+            throw new Error('Invalid Besselian data - elements array is incomplete');
+        }
+
+        const lat = parseFloat(25.28945);
+        const lng = parseFloat(-104.12775);
+        
+        console.log('Initializing map with coordinates:', lat, lng);
+
+        // Initialize map
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: 'https://tiles.openfreemap.org/styles/liberty',
+            center: [lng, lat],
+            zoom: 3
+        });
+
+        // Add navigation controls
+        map.addControl(new maplibregl.NavigationControl(), 'top-right');
+        map.addControl(new maplibregl.ScaleControl(), 'bottom-left');
+        map.addControl(new maplibregl.FullscreenControl(), 'top-right');
+
+        // Variable to store current popup
+        let currentPopup = null;
+
+        // Add initial popup
+        map.on('load', () => {
+            // Create initial popup
+            const popup = new maplibregl.Popup()
+                .setLngLat([lng, lat])
+                .setHTML("Click the map to get local eclipse circumstances.")
+                .addTo(map);
+            
+            currentPopup = popup;
+
+                        // Load eclipse path data from separate file
+            // This script will add the eclipse path lines to the map
+            loadEclipsePath(map);
+            
+            // Add Greatest Eclipse marker
+            const geMarkerElement = document.createElement('div');
+            geMarkerElement.className = 'marker';
+            geMarkerElement.style.backgroundImage = 'url(../image/gemarker.png)';
+            geMarkerElement.style.width = '20px';
+            geMarkerElement.style.height = '20px';
+            geMarkerElement.style.backgroundSize = '100%';
+
+            // Create the marker
+            const greatestEclipseMarker = new maplibregl.Marker(geMarkerElement)
+                .setLngLat([lng, lat])
+                .addTo(map);
+
+            // Add click event to the marker
+            greatestEclipseMarker.getElement().addEventListener('click', () => {
+                // Close current popup if exists
+                if (currentPopup) {
+                    currentPopup.remove();
+                }
+
+                // Create new popup
+                const gePopup = new maplibregl.Popup()
+                    .setLngLat([lng, lat])
+                    .setHTML(loc_circ(lat, lng));
+                
+                gePopup.addTo(map);
+                currentPopup = gePopup;
+            });
+        });
+
+        // Configure the click listener
+        map.on('click', (e) => {
+            try {
+                // Close current popup if exists
+                if (currentPopup) {
+                    currentPopup.remove();
+                }
+
+                const clickLat = e.lngLat.lat;
+                const clickLng = e.lngLat.lng;
+                const content = loc_circ(clickLat, clickLng);
+
+                if (content) {
+                    // Create new popup
+                    const popup = new maplibregl.Popup()
+                        .setLngLat([clickLng, clickLat])
+                        .setHTML(content);
+                    
+                    popup.addTo(map);
+                    currentPopup = popup;
+                } else {
+                    console.error('Failed to generate location circumstances');
+                }
+            } catch (error) {
+                console.error('Error handling map click:', error);
+            }
+        });
+
+    } catch (error) {
+        console.error('Error initializing map:', error);
+
+        // A context can still be refused after hasWebGL() passes: drivers get
+        // blocklisted, the GPU process dies, or the tab exhausts contexts.
+        // MapLibre surfaces that as webglcontextcreationerror, so route it to
+        // the same explanation instead of the red box.
+        if (isWebGLError(error)) {
+            showMapUnavailable(error.message);
+            return;
+        }
+
+        // Create a more detailed error message
+        let errorMessage = 'Error loading map: ' + error.message;
+        let troubleshootingTips = '';
+        
+        // Add specific troubleshooting tips based on the error
+        if (error.message.includes('elements')) {
+            troubleshootingTips = '<br><br>Possible causes:<br>' +
+                '- Database connection issue<br>' +
+                '- Missing Besselian elements for this eclipse<br>' +
+                '- JavaScript error in loading elements array';
+        } else if (error.message.includes('MapLibre')) {
+            troubleshootingTips = '<br><br>Possible causes:<br>' +
+                '- MapLibre library failed to load<br>' +
+                '- Network connectivity issue<br>' +
+                '- JavaScript error in MapLibre initialization';
+        }
+        
+        // Display the error message in the map container
+        document.getElementById("map").innerHTML = 
+            '<div style="color: red; padding: 20px; background-color: #ffeeee; border: 1px solid #ffaaaa; border-radius: 5px;">' +
+            '<h3>Map Loading Error</h3>' +
+            '<p>' + errorMessage + '</p>' +
+            troubleshootingTips +
+            '<p>Please try refreshing the page. If the problem persists, check your internet connection or try again later.</p>' +
+            '</div>';
+    }
+};
+
+// Add the load event listener
+window.addEventListener('load', function() {
+    try {
+        console.log('Page loaded, checking dependencies...');
+        
+        // Check if MapLibre is loaded
+        if (typeof maplibregl === 'undefined') {
+            console.error('MapLibre GL JS not loaded');
+            throw new Error('MapLibre GL JS not loaded');
+        }
+        console.log('MapLibre GL JS loaded successfully');
+
+        // Stop before MapLibre runs: without a WebGL context there is no map to
+        // draw, and letting the constructor fail produces a red error box that
+        // wrongly blames the visitor's network connection.
+        if (!hasWebGL()) {
+            console.warn('WebGL unavailable in this browser - showing data fallback');
+            showMapUnavailable('');
+            return;
+        }
+
+        // Check if elements array exists
+        if (typeof elements === 'undefined') {
+            console.error('Besselian elements not defined');
+            throw new Error('Besselian elements not defined - check database connection');
+        }
+        console.log('Besselian elements defined:', elements);
+        
+        // Check if initMap function exists
+        if (typeof window.initMap === 'function') {
+            console.log('Initializing map...');
+            window.initMap();
+        } else {
+            console.error('Map initialization function not found');
+            throw new Error('Map initialization function not found');
+        }
+    } catch (error) {
+        console.error('Error during page load:', error);
+
+        if (isWebGLError(error)) {
+            showMapUnavailable(error.message);
+            return;
+        }
+
+        // Create a more detailed error message
+        let errorMessage = 'Error loading map: ' + error.message;
+        let troubleshootingTips = '';
+        
+        // Add specific troubleshooting tips based on the error
+        if (error.message.includes('elements')) {
+            troubleshootingTips = '<br><br>Possible causes:<br>' +
+                '- Database connection issue<br>' +
+                '- Missing Besselian elements for this eclipse<br>' +
+                '- JavaScript error in loading elements array';
+        } else if (error.message.includes('MapLibre')) {
+            troubleshootingTips = '<br><br>Possible causes:<br>' +
+                '- MapLibre library failed to load<br>' +
+                '- Network connectivity issue<br>' +
+                '- JavaScript error in MapLibre initialization';
+        }
+        
+        const mapDiv = document.getElementById("map");
+        if (mapDiv) {
+            mapDiv.innerHTML = 
+                '<div style="color: red; padding: 20px; background-color: #ffeeee; border: 1px solid #ffaaaa; border-radius: 5px;">' +
+                '<h3>Map Loading Error</h3>' +
+                '<p>' + errorMessage + '</p>' +
+                troubleshootingTips +
+                '<p>Please try refreshing the page. If the problem persists, check your internet connection or try again later.</p>' +
+                '</div>';
+        }
+    }
+});
+//]]>
+</script>
+
+<noscript>
+<hr class="blue" />
+<h3 style="text-align: center;">Go to <a href="../solar.html">NASA Solar Eclipse
+Page</a></h3>
+<h3 style="text-align: center;">Go to <a href="../lunar.html">NASA Lunar Eclise Page</a></h3>
+<h3 style="text-align: center;">Go to <a href="../transit/transit.html">NASA Planetary Transit Page</a></h3>
+<h3 style="text-align: center;">Go to <a href="../resource.html">NASA Eclipse Resource Page</a></h3>
+<hr class="blue" />
+<table border="5" cellspacing="5" style="margin-left: auto; margin-right: auto;">
+<tr>
+<td>
+<table style="margin-left: auto; margin-right: auto;"><tr><td><img src="../image/NASAlogo.tiny.gif" alt="NASA logo" /></td>
+<td><p>Webmaster: Fred Espenak<br />
+Email: <a href="mailto:fred.espenak-1@nasa.gov">fred.espenak-1@nasa.gov</a></p>
+<p>Official NASA Representative: Alex Young<br />
+Email: <a href="mailto:c.a.young@nasa.gov">Alex Young</a></p></td></tr>
+</table>
+<p style="text-align: center;">Heliophysics Science Division, Code 670<br />
+NASA's Goddard Space Flight Center, Greenbelt, Maryland 20771, USA</p></td>
+</tr>
+</table>
+</noscript>
+
+</body>
+</html>

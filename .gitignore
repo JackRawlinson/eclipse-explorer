@@ -1,0 +1,9 @@
+# Python environment for the data pipeline
+data-pipeline/.venv/
+__pycache__/
+*.pyc
+
+# Generated data. Regenerate with: cd data-pipeline && .venv/bin/python build.py
+# Commit it instead if you would rather deploy public/ without running the pipeline.
+public/data/*.geojson
+public/data/index.json
