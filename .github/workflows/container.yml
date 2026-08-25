@@ -1,0 +1,77 @@
+# Builds the container and pushes it to GitHub's own registry, so Unraid (or
+# anything else) can pull it instead of building it.
+#
+# After the first successful run the package is PRIVATE. Make it public once —
+# repo → Packages → eclipse-explorer → Package settings → Change visibility —
+# or Unraid will need registry credentials to pull.
+
+name: container
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    # The fast checks: the central line and path limits against NASA's published
+    # tables, and the saros formula against their catalogue. Seconds, not minutes,
+    # and they are what would catch the maths breaking.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r data-pipeline/requirements.txt
+      # --check turns these into gates: they exit non-zero if the reduction has
+      # drifted past the thresholds in the README's verification tables.
+      - name: Central line vs NASA
+        working-directory: data-pipeline
+        run: python verify_central.py --fit --check
+      - name: Path limits and duration vs NASA
+        working-directory: data-pipeline
+        run: python verify_limits.py --fitted --check
+
+  image:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # GHCR insists on a lowercase path; repository names need not be.
+      - name: Resolve image name
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=tag
+            type=sha,format=short
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64          # Unraid is x86-64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Layer cache, so a change to the site alone skips regenerating data
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

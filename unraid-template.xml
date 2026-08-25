@@ -1,0 +1,58 @@
+<?xml version="1.0"?>
+<!--
+  Unraid Docker template for Eclipse Mapper.
+
+  Copy to /boot/config/plugins/dockerMan/templates-user/my-eclipse-mapper.xml on
+  the NAS, then Docker tab -> Add Container -> pick "eclipse-mapper" from the
+  template dropdown.
+
+  The image comes from GitHub's registry, published by .github/workflows/container.yml.
+  Make the package public once (repo -> Packages -> Package settings -> Change
+  visibility) or Unraid will need credentials to pull it.
+-->
+<Container version="2">
+  <Name>eclipse-mapper</Name>
+  <Repository>ghcr.io/jackrawlinson/eclipse-explorer:latest</Repository>
+  <Registry>https://github.com/JackRawlinson/eclipse-explorer/pkgs/container/eclipse-explorer</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/JackRawlinson/eclipse-explorer/issues</Support>
+  <Project>https://github.com/JackRawlinson/eclipse-explorer</Project>
+  <Overview>
+    Every solar eclipse from 1900 to 2100 on an interactive map: paths of totality
+    and annularity, how much of the Sun goes anywhere else, and local contact times
+    for any point you click.
+
+    Paths are computed from NASA's Besselian elements rather than traced from
+    images, so they stay sharp at every zoom. Eclipse predictions by Fred Espenak,
+    NASA's GSFC.
+
+    Entirely static: the container serves files and runs nothing at request time,
+    and needs no outbound network. Map tiles are fetched by your browser from
+    openfreemap.org, so whichever device you view it on needs internet even though
+    the NAS does not.
+  </Overview>
+  <Category>Tools: HomeAutomation: Other:</Category>
+  <WebUI>http://[IP]:[PORT:80]/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/JackRawlinson/eclipse-explorer/main/unraid-template.xml</TemplateURL>
+  <Icon/>
+  <ExtraParams>--read-only --tmpfs /var/cache/nginx --tmpfs /var/run --security-opt no-new-privileges:true</ExtraParams>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires/>
+  <Config
+    Name="WebUI Port"
+    Target="80"
+    Default="8080"
+    Mode="tcp"
+    Description="Host port for the map. Browse to http://TOWER-IP:PORT/"
+    Type="Port"
+    Display="always"
+    Required="true"
+    Mask="false">8080</Config>
+</Container>

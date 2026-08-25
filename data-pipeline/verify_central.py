@@ -98,8 +98,39 @@ def fit_report():
               f"{canon:13.5f} {best_rms:12.5f}")
 
 
+# Regression thresholds, set well clear of the numbers actually achieved so that
+# only a real break trips them.  See the README's verification tables.
+UNFITTED_RMS_LIMIT = 0.002      # degrees, for the two eclipses NASA has not revised
+FITTED_RMS_LIMIT = 0.01         # degrees, once Delta T is matched
+
+
+def check():
+    """Fail loudly if the reduction has drifted.  Used by CI."""
+    cat = {e.key: (e, x) for e, x in B.load_catalog()}
+    problems = []
+    for key, fname, _ in ((k, f, None) for k, f in
+                          ((c[0], c[1]) for c in CASES)):
+        el, _ = cat[key]
+        rows = [r for r in parse_path_table(os.path.join(B.CACHE, "nasa", fname))
+                if r["central"]]
+        canon = float(np.sqrt((separations(el, rows, el.dt) ** 2).mean()))
+        best_dt, best_rms = fit_delta_t(el, rows, el.dt - 12.0, el.dt + 6.0)
+        if abs(best_dt - el.dt) < 0.5 and canon > UNFITTED_RMS_LIMIT:
+            problems.append(f"{key}: rms {canon:.5f} deg at the canon's own Delta T "
+                            f"(limit {UNFITTED_RMS_LIMIT})")
+        if best_rms > FITTED_RMS_LIMIT:
+            problems.append(f"{key}: rms {best_rms:.5f} deg even at its best-fit "
+                            f"Delta T {best_dt:.2f} (limit {FITTED_RMS_LIMIT})")
+    for p in problems:
+        print("FAIL", p)
+    print("central line: " + ("OK" if not problems else f"{len(problems)} problem(s)"))
+    return not problems
+
+
 if __name__ == "__main__":
-    args = [a for a in sys.argv[1:] if a != "--fit"]
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
     main(float(args[0]) if args else 1.0)
     if "--fit" in sys.argv:
         fit_report()
+    if "--check" in sys.argv:
+        sys.exit(0 if check() else 1)

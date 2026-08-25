@@ -31,18 +31,82 @@ network, bind to the tailnet address: `python3 serve.py 8000 --bind 100.x.y.z`.
 
 Deploy by copying `public/` to any static host.
 
-### Using it
+### In a container
 
-- **Click anywhere on the map** for that spot's local circumstances: how much of the
-  Sun goes, when the partial phase runs, and — inside the path — how long totality
-  or annularity lasts there.
-- **← / →** step to the previous or next eclipse, **/** focuses the search box.
-- The URL carries the selection (`?e=20260812`), so views are linkable and the
-  browser's back and forward buttons work.
-- Map controls, top right: refit to the selected eclipse, switch the basemap between
-  light and dark, switch between the flat map and a globe, and switch the shading
-  between a smooth gradient and stepped contour bands. The globe is worth reaching
-  for on polar paths — Web Mercator cuts off above 85°.
+```sh
+docker compose up -d --build          # then http://localhost:8080/
+```
+
+Or without compose:
+
+```sh
+docker build -t eclipse-mapper .
+docker run -d --name eclipse-mapper -p 8080:80 --restart unless-stopped eclipse-mapper
+```
+
+The image is a two-stage build: the first stage runs the pipeline, the second
+keeps only its output on top of nginx. There is no Python in the finished image
+and nothing runs at request time — about 60 MB, all of it files. `cache/` ships
+with the repo, so the build needs no network either.
+
+The build takes roughly ten minutes, nearly all of it generating data. Narrow the
+range if that is tedious on a NAS:
+
+```sh
+docker build --build-arg YEAR_MIN=2000 --build-arg YEAR_MAX=2050 -t eclipse-mapper .
+```
+
+nginx serves it gzipped — GeoJSON compresses about two and a half to one — with
+per-eclipse data cached for a month (the build stamp in the URL busts it) and the
+index and app shell revalidated every time.
+
+**Map tiles are fetched by the browser, not by the container.** The container
+needs no outbound network at all; the device you view it on does.
+
+### On Unraid
+
+`.github/workflows/container.yml` builds the image on every push to `main` and
+publishes it to GitHub's registry, so the NAS pulls it like any other container
+and never has to build anything.
+
+**Once, after the first successful run:** the package starts out private. Open
+repo → **Packages** → *eclipse-explorer* → **Package settings** → **Change
+visibility** → public. Skip this and Unraid gets a 403 with nothing useful in the
+log. (Keeping it private is fine too — you then need `docker login ghcr.io` on the
+NAS with a personal access token carrying `read:packages`.)
+
+Then, on the NAS — **Docker** → **Add Container**, and either fill in two fields:
+
+| field | value |
+|---|---|
+| Repository | `ghcr.io/jackrawlinson/eclipse-explorer:latest` |
+| Port | host `8080` → container `80` |
+
+…or drop `unraid-template.xml` into
+`/boot/config/plugins/dockerMan/templates-user/` and pick *eclipse-mapper* from the
+template list, which fills the same fields in and sets the WebUI link.
+
+Updating is **Force Update** on the container, or Compose Up again — the workflow
+keeps `:latest` current, and pinned tags (`:sha-abc1234`, `:v1.0.0`) are published
+alongside if you would rather not track the branch.
+
+If you would sooner not involve a registry:
+
+- **Compose Manager plugin** — clone the repo onto the array (say
+  `/mnt/user/appdata/eclipse-mapper`), point a stack at it, Compose Up. Builds on
+  the NAS, ten-odd minutes.
+- **Ship a tarball** —
+  ```sh
+  docker build -t eclipse-mapper . && docker save eclipse-mapper | gzip > em.tar.gz
+  # on the NAS:  gunzip -c em.tar.gz | docker load
+  ```
+
+The container runs read-only with `no-new-privileges`, writing only to two tmpfs
+mounts nginx wants for scratch. It holds no state, so there is nothing to back up
+and nothing to persist — updating means recreating it.
+
+Every asset is referenced relatively, so it sits happily at a subpath behind a
+reverse proxy as well as at a root.
 
 ## Repository layout
 
@@ -272,11 +336,16 @@ over the North Pole, a path across the antimeridian, a hybrid, a partial-only
 eclipse, several grazing eclipses — mis-classified cells run at 0–7 out of regions of
 several hundred to several thousand.
 
-`check_output.py 120` repeats the comparison against the **shipped** polygons, and
-over 120 randomly chosen eclipses came to **646 mis-classified cells out of about
-1.56 million reached — 0.04%**, with the worst single eclipse at 18. What is left is
-the straight-line error between contour vertices, and cell centres that fall within
+`check_output.py` repeats the comparison against the **shipped** polygons. Over 60
+randomly chosen eclipses the region geometry came to **293 mis-classified cells out
+of 647,605 reached — 0.045%**, with the worst single eclipse at 18. What is left is
+the straight-line error between contour vertices, and cell centres falling within
 metres of a boundary.
+
+The obscuration contours are counted separately and held to a looser standard:
+1,255 boundary cells over 226 contours. They are simplified to about 4 km on
+purpose — they are a reading aid over a smooth field, not a survey line — so a
+one-degree grid is bound to disagree along them.
 
 ### Local circumstances
 
@@ -314,6 +383,16 @@ A part of a path may legitimately span 200° of longitude without going anywhere
 the antimeridian, so the test is on the *jump between neighbouring vertices*, not on
 the span. The one edge allowed to jump is the one closing a polar cap along the top
 or bottom of the map.
+
+### In CI
+
+`.github/workflows/container.yml` runs the two fast comparisons against NASA's
+tables on every push, with `--check`, before it will build an image. That flag
+turns them into gates: they exit non-zero if the central line drifts past 0.002°
+at the canon's own ΔT, if any eclipse fails to reach 0.01° even at its best-fit
+ΔT, if a path limit's median passes 0.01°, or if a central duration's median
+passes half a second. Flipping the sign of the ΔT term — the one mistake most
+likely to go unnoticed, since the map still looks plausible — trips five of them.
 
 ### Saros
 

@@ -1,0 +1,24 @@
+# docker compose up -d --build
+#
+# On Unraid this works through the Compose Manager plugin; the Docker tab wants
+# unraid-template.xml instead, or an "Add Container" filled in by hand.
+
+services:
+  eclipse-mapper:
+    build:
+      context: .
+      args:
+        # Narrow these to cut the image build down from ~11 minutes.
+        YEAR_MIN: "1900"
+        YEAR_MAX: "2100"
+    image: eclipse-mapper:latest
+    container_name: eclipse-mapper
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+    security_opt:
+      - no-new-privileges:true

@@ -53,6 +53,43 @@ def run(use_fitted_dt=None):
               f"max={np.nanmax(np.abs(dur[okd]-dref[okd])):.2f} s")
 
 
+LIMIT_MEDIAN_DEG = 0.01      # limits, once Delta T is matched
+DURATION_MEDIAN_S = 0.5      # central duration
+
+
+def run_check():
+    """Fail loudly if limits or durations have drifted.  Used by CI."""
+    cat = {e.key: (e, x) for e, x in B.load_catalog()}
+    fitted = {"20170821": 68.35, "20240408": 71.15, "20260812": 72.03}
+    problems = []
+    for key, fname in CASES:
+        el, _ = cat[key]
+        dT = fitted.get(key, el.dt)
+        rows = parse_path_table(os.path.join(B.CACHE, "nasa", fname))
+        st = el.state(np.array([r["ut"] for r in rows]) + dT / 3600.0 - el.t0)
+        shift = B.SIDEREAL_RATE * (dT - el.dt) * 15 / 3600.0
+        for name, side in (("north", +1), ("south", -1)):
+            e_xi, e_eta = G.limit_curve(st, side)
+            la, lo, _ = st.surface(e_xi, e_eta)
+            lo = (lo + shift + 180) % 360 - 180
+            d = [G.great_circle_km(r[name][0], r[name][1], a, b) / 111.195
+                 for r, a, b in zip(rows, la, lo) if r[name] and np.isfinite(a)]
+            if d and float(np.median(d)) > LIMIT_MEDIAN_DEG:
+                problems.append(f"{key} {name} limit median {np.median(d):.5f} deg")
+        dur = G.central_duration_s(st)
+        ref = np.array([r["duration_s"] if r["duration_s"] else np.nan for r in rows], float)
+        ok = np.isfinite(dur) & np.isfinite(ref)
+        if ok.any() and float(np.nanmedian(np.abs(dur[ok] - ref[ok]))) > DURATION_MEDIAN_S:
+            problems.append(f"{key} duration median off by "
+                            f"{np.nanmedian(np.abs(dur[ok] - ref[ok])):.2f} s")
+    for p in problems:
+        print("FAIL", p)
+    print("limits and duration: " + ("OK" if not problems else f"{len(problems)} problem(s)"))
+    return not problems
+
+
 if __name__ == "__main__":
     run({"20170821": 68.35, "20240408": 71.15, "20260812": 72.03}
         if "--fitted" in sys.argv else None)
+    if "--check" in sys.argv:
+        sys.exit(0 if run_check() else 1)
