@@ -23,6 +23,10 @@ import geometry as G
 
 NEVER_VISIBLE = -1.0e6
 INV_PHI = (5.0 ** 0.5 - 1.0) / 2.0
+# The deepest moment often *is* the moment the Sun clears the horizon, and a bare
+# zeta >= 0 test then turns on the last bit of a Newton solve.  Six millimetres of
+# slack makes the answer the same however the arithmetic rounds.
+HORIZON_TOL = 1e-9
 
 
 def _horizon_crossing(el, lat, lon, t_lo, t_hi, z_lo, z_hi, steps=3):
@@ -52,7 +56,7 @@ def _reach_at(el, lat, lon, t, penumbral):
     xi, eta, zeta = st.observer(lat, lon)
     radius = np.abs(l0 - zeta * tanf)
     reach = radius - np.hypot(xi - st.x, eta - st.y)
-    return np.where(zeta >= 0.0, reach, NEVER_VISIBLE)
+    return np.where(zeta >= -HORIZON_TOL, reach, NEVER_VISIBLE)
 
 
 def peak_time(el, lat, lon, penumbral=True, n_scan=64, window=None,
@@ -83,7 +87,7 @@ def peak_time(el, lat, lon, penumbral=True, n_scan=64, window=None,
         p_lat, p_lon = flat_lat[sl], flat_lon[sl]
         xi, eta, zeta = st_scan.observer(p_lat[:, None], p_lon[:, None])
         radius = np.abs(l0 - zeta * tanf)
-        coarse = np.where(zeta >= 0.0,
+        coarse = np.where(zeta >= -HORIZON_TOL,
                           radius - np.hypot(xi - st_scan.x, eta - st_scan.y),
                           NEVER_VISIBLE)
         peak = np.argmax(coarse, axis=1)
@@ -375,7 +379,7 @@ def eclipse_field(el, lat, lon, window=None, **kwargs):
     l1p = st.l1 - zeta * st.tanf1
     l2p = st.l2 - zeta * st.tanf2
 
-    magnitude = np.where(zeta >= 0.0, (l1p - sep) / (l1p + l2p), 0.0)
+    magnitude = np.where(zeta >= -HORIZON_TOL, (l1p - sep) / (l1p + l2p), 0.0)
     ratio = (l1p - l2p) / (l1p + l2p)
     return magnitude, obscuration_from(magnitude, ratio), ratio
 
@@ -412,7 +416,7 @@ def sample_grid(el, window, step):
     l1p = st.l1 - zeta * st.tanf1
     l2p = st.l2 - zeta * st.tanf2
 
-    visible = zeta >= 0.0
+    visible = zeta >= -HORIZON_TOL
     reach = np.where(visible, l1p - sep, NEVER_VISIBLE)
     magnitude = np.where(visible, (l1p - sep) / (l1p + l2p), 0.0)
     obscuration = obscuration_from(magnitude, (l1p - l2p) / (l1p + l2p))

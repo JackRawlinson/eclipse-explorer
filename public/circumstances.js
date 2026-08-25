@@ -8,6 +8,9 @@ const E2 = 0.00669437999014;
 const SQRT1ME2 = Math.sqrt(1 - E2);
 const SIDEREAL = 1.00273791;
 const DEG = Math.PI / 180;
+// Matches HORIZON_TOL in the Python: the deepest moment is often sunrise itself,
+// and a bare zeta >= 0 test would turn on how the solve happened to round.
+const HORIZON_TOL = 1e-9;
 
 const poly = (c, t) => {
   let v = 0;
@@ -62,7 +65,7 @@ function sample(el, lat, lon, t) {
 
 const reachAt = (el, lat, lon, t) => {
   const s = sample(el, lat, lon, t);
-  return s.zeta >= 0 ? s.l1p - s.sep : -1e6;
+  return s.zeta >= -HORIZON_TOL ? s.l1p - s.sep : -1e6;
 };
 
 // Distance from the axis less the shadow radius: zero at a contact.

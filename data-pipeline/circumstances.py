@@ -13,6 +13,10 @@ import numpy as np
 import geometry as G
 from besselian import SQRT1ME2
 
+# Matches raster.HORIZON_TOL: the deepest moment is often the moment of sunrise
+# itself, and a bare zeta >= 0 test would turn on how the solve happened to round.
+HORIZON_TOL = 1e-9
+
 
 def _reach(el, lat, lon, t):
     """Penumbral radius minus distance from the axis; the magnitude's numerator."""
@@ -20,7 +24,7 @@ def _reach(el, lat, lon, t):
     xi, eta, zeta = st.observer(lat, lon)
     sep = np.hypot(xi - st.x, eta - st.y)
     l1p = st.l1 - zeta * st.tanf1
-    return np.where(zeta >= 0.0, l1p - sep, -1e6), st, sep, zeta
+    return np.where(zeta >= -HORIZON_TOL, l1p - sep, -1e6), st, sep, zeta
 
 
 def _horizon_crossing(el, lat, lon, t_lo, t_hi, steps=4):

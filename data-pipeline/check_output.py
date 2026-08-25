@@ -185,20 +185,29 @@ def main(sample=60, seed=5):
         path = os.path.join(config.OUTPUT_DIR, f"{e['id']}.geojson")
         res = physical_check(e["id"], path)
         pen, umb = res["penumbra"], res["path"]
-        worst.append((umb[1] + pen[1] + (res.get("bands", (0, 0))[1]),
-                      e["id"], e["type"], pen, umb))
+        worst.append((umb[1] + pen[1], e["id"], e["type"], pen,
+                      umb, res.get("bands", (0, 0))))
         print(f"\r  {n}/{len(picked)}", end="", flush=True)
     print("\r" + " " * 20 + "\r", end="")
     worst.sort(reverse=True)
     print(f"  {'eclipse':>10} {'type':<8} {'penumbra':>16} {'path':>16}")
-    for total, key, kind, pen, umb in worst[:12]:
+    for _, key, kind, pen, umb, _band in worst[:12]:
         print(f"  {key:>10} {kind:<8} {pen[0]:>7} /{pen[1]:>5} bad "
               f"{umb[0]:>7} /{umb[1]:>5} bad")
+
     tot_bad = sum(w[0] for w in worst)
     reached = sum(w[3][0] + w[4][0] for w in worst)
-    print(f"  mis-classified cells across the sample: {tot_bad} of {reached} "
-          f"({100 * tot_bad / max(1, reached):.3f}%), "
-          f"worst single eclipse {worst[0][0]}")
+    print(f"\n  region geometry: {tot_bad} cells mis-classified of {reached} "
+          f"({100 * tot_bad / max(1, reached):.3f}%), worst single eclipse "
+          f"{worst[0][0]}")
+
+    # Bands are simplified to a few kilometres on purpose, so their boundary cells
+    # are counted apart rather than muddying the figure above.
+    band_bad = sum(w[5][1] for w in worst)
+    band_n = sum(w[5][0] for w in worst)
+    if band_n:
+        print(f"  obscuration bands: {band_bad} boundary cells over {band_n} "
+              f"contours, simplified to ~4 km")
 
 
 if __name__ == "__main__":
