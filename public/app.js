@@ -15,6 +15,7 @@ const BASEMAPS = [
   { id: 'dark', label: 'Dark', dark: true },
 ];
 const styleUrl = (id) => `https://tiles.openfreemap.org/styles/${id}`;
+const DEFAULT_BASEMAP = 'liberty';
 
 // Painted onto the mask in the browser. A near-neutral slate: the shading has to
 // sit under any basemap, and a coloured wash over a coloured sea reads as nothing.
@@ -69,8 +70,11 @@ const state = {
   current: null,
   query: '',
   types: new Set(),
-  basemap: Math.max(0, BASEMAPS.findIndex(
-    (b) => b.id === new URLSearchParams(location.search).get('basemap'))),
+  basemap: (() => {
+    const want = new URLSearchParams(location.search).get('basemap') || DEFAULT_BASEMAP;
+    const found = BASEMAPS.findIndex((b) => b.id === want);
+    return found >= 0 ? found : 0;
+  })(),
   theme: 'light',
   // How the obscuration mask is painted. The mask itself carries no colour, so
   // all three are live: ?tint=334155&shade=0.3&gamma=0.85 tries alternatives
@@ -688,8 +692,12 @@ function wirePanels() {
     });
   }
   if (narrow()) {
-    $('picker').classList.add('is-collapsed');
-    $('picker').querySelector('.panel__toggle').setAttribute('aria-expanded', 'false');
+    // On a phone the sheets would cover most of the map, so both start shut and
+    // only one opens at a time.
+    for (const panel of document.querySelectorAll('.panel')) {
+      panel.classList.add('is-collapsed');
+      panel.querySelector('.panel__toggle').setAttribute('aria-expanded', 'false');
+    }
   }
 }
 

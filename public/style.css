@@ -98,7 +98,7 @@ html, body {
 
 .panel--picker { flex: 1 1 auto; min-height: 7rem; }
 .panel--info   { flex: 0 0 auto; max-height: 64%; }
-.panel.is-collapsed { flex: 0 0 auto; max-height: none; }
+.panel.is-collapsed { flex: 0 0 auto; max-height: none; min-height: 0; }
 
 .panel__head {
   display: flex;

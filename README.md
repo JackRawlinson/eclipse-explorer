@@ -31,7 +31,7 @@ four hundred images. Append any of these to the URL to try alternatives:
 | `?tint=334155` | colour of the shading, hex | near-neutral slate |
 | `?shade=0.3` | how strong it is, 0 to 1 | `0.3` |
 | `?gamma=0.85` | curve; lower lifts the faint outer reaches | `0.85` |
-| `?basemap=liberty` | `positron`, `liberty`, `bright`, `fiord`, `dark` | `positron` |
+| `?basemap=positron` | `positron`, `liberty`, `bright`, `fiord`, `dark` | `liberty` |
 
 Settle on a combination and it becomes a one-line change to the defaults in
 `app.js` — no rebuild.
