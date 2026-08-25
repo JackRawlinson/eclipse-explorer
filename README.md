@@ -18,9 +18,23 @@ images, so they stay sharp at every zoom level.
 - **← / →** step through eclipses, **/** focuses the search box.
 - The URL carries the selection (`?e=20260812`), so views are linkable and the
   back button works.
-- Buttons top right: refit to the eclipse, light/dark basemap, flat map or globe,
+- Buttons top right: refit to the eclipse, cycle the basemap, flat map or globe,
   and smooth shading or stepped contour bands. The globe is worth reaching for on
   polar paths — Web Mercator cuts off above 85°.
+
+The shading is a plain obscuration mask — one grey channel, no colour — painted in
+the browser, so how it looks is a live setting rather than something baked into
+four hundred images. Append any of these to the URL to try alternatives:
+
+| parameter | does | default |
+|---|---|---|
+| `?tint=334155` | colour of the shading, hex | near-neutral slate |
+| `?shade=0.3` | how strong it is, 0 to 1 | `0.3` |
+| `?gamma=0.85` | curve; lower lifts the faint outer reaches | `0.85` |
+| `?basemap=liberty` | `positron`, `liberty`, `bright`, `fiord`, `dark` | `positron` |
+
+Settle on a combination and it becomes a one-line change to the defaults in
+`app.js` — no rebuild.
 
 ## Running it
 

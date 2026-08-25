@@ -16,6 +16,23 @@ const BASEMAPS = [
 ];
 const styleUrl = (id) => `https://tiles.openfreemap.org/styles/${id}`;
 
+// Painted onto the mask in the browser. A near-neutral slate: the shading has to
+// sit under any basemap, and a coloured wash over a coloured sea reads as nothing.
+const SHADING_DEFAULTS = { tint: '334155', shade: 0.3, gamma: 0.85 };
+
+function readShadingOptions() {
+  const q = new URLSearchParams(location.search);
+  const num = (k) => (q.has(k) && Number.isFinite(Number(q.get(k)))
+    ? Number(q.get(k)) : SHADING_DEFAULTS[k]);
+  const hex = (q.get('tint') || SHADING_DEFAULTS.tint).replace('#', '');
+  return {
+    rgb: [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16) || 0),
+    shade: Math.min(1, Math.max(0, num('shade'))),
+    gamma: Math.max(0.1, num('gamma')),
+    key: `${hex}-${num('shade')}-${num('gamma')}`,
+  };
+}
+
 const PAINT = {
   light: {
     total: '#4c1d95', annular: '#c2410c', penumbra: '#475569',
@@ -55,9 +72,10 @@ const state = {
   basemap: Math.max(0, BASEMAPS.findIndex(
     (b) => b.id === new URLSearchParams(location.search).get('basemap'))),
   theme: 'light',
-  // The shading is a backdrop, not the subject: the basemap has to stay legible
-  // through it. Overridable with ?shade= while picking a value.
-  shade: Number(new URLSearchParams(location.search).get('shade')) || 0.3,
+  // How the obscuration mask is painted. The mask itself carries no colour, so
+  // all three are live: ?tint=334155&shade=0.3&gamma=0.85 tries alternatives
+  // without regenerating a single image.
+  shading: readShadingOptions(),
   elements: null,       // Besselian elements of the selected eclipse
   version: '',          // build stamp, appended to data URLs to defeat caching
   gradient: true,       // smooth shading, versus stepped contour bands
@@ -65,6 +83,8 @@ const state = {
 };
 
 const geoCache = new Map();
+const maskCache = new Map();   // painted masks, keyed by source and appearance
+let shadingUrl = null;
 let loadToken = 0;
 let map;
 let popup = null;
@@ -151,7 +171,7 @@ function addEclipseLayers() {
 
   if (map.getLayer('shading')) map.removeLayer('shading');
   map.addLayer({ id: 'shading', type: 'raster', source: 'shading',
-                 paint: { 'raster-opacity': state.gradient ? state.shade : 0,
+                 paint: { 'raster-opacity': state.gradient ? 1 : 0,
                           'raster-fade-duration': 0,
                           'raster-resampling': 'linear' } });
 
@@ -218,13 +238,67 @@ function setMapData(fc) {
   if (src) src.setData(fc);
 }
 
-function setShading(entry) {
+async function setShading(entry) {
+  if (!map.getSource('shading')) return;
+  if (!entry.shading) { applyShadingImage(BLANK_PNG); return; }
+  try {
+    const painted = await paintMask(dataUrl(`${entry.id}.png`));
+    if (state.current?.id === entry.id) applyShadingImage(painted);
+  } catch (err) {
+    applyShadingImage(BLANK_PNG);          // the contours still carry the numbers
+    console.warn('could not paint the shading mask', err);
+  }
+}
+
+function applyShadingImage(url) {
   const src = map.getSource('shading');
-  if (!src) return;
-  src.updateImage({
-    url: entry.shading ? dataUrl(`${entry.id}.png`) : BLANK_PNG,
-    coordinates: WORLD_CORNERS,
+  if (src) src.updateImage({ url, coordinates: WORLD_CORNERS });
+  if (shadingUrl && shadingUrl !== url) URL.revokeObjectURL(shadingUrl);
+  shadingUrl = url.startsWith('blob:') ? url : null;
+}
+
+/**
+ * Colour the obscuration mask. What ships is a single grey channel holding
+ * obscuration itself; the tint, the opacity and the curve are applied here, so
+ * changing how the shading looks costs a repaint rather than a rebuild.
+ */
+async function paintMask(url) {
+  const { rgb, shade, gamma, key } = state.shading;
+  const cached = maskCache.get(url + key);
+  if (cached) return cached;
+
+  const bitmap = await createImageBitmap(await (await fetch(url)).blob());
+  const canvas = document.createElement('canvas');
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(bitmap, 0, 0);
+  bitmap.close?.();
+
+  const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const px = image.data;
+  const [r, g, b] = rgb;
+  // A lookup beats calling pow a third of a million times.
+  const alphaFor = new Uint8Array(256);
+  for (let v = 0; v < 256; v++) {
+    alphaFor[v] = Math.round((v / 255) ** gamma * shade * 255);
+  }
+  for (let i = 0; i < px.length; i += 4) {
+    px[i + 3] = alphaFor[px[i]];            // grey level is the obscuration
+    px[i] = r; px[i + 1] = g; px[i + 2] = b;
+  }
+  ctx.putImageData(image, 0, 0);
+
+  const blobUrl = await new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(URL.createObjectURL(blob)), 'image/png');
   });
+  if (maskCache.size > 12) {
+    const oldest = maskCache.keys().next().value;
+    URL.revokeObjectURL(maskCache.get(oldest));
+    maskCache.delete(oldest);
+  }
+  maskCache.set(url + key, blobUrl);
+  return blobUrl;
 }
 
 function cycleBasemap() {
@@ -240,7 +314,7 @@ function cycleBasemap() {
 function toggleGradient() {
   state.gradient = !state.gradient;
   if (map.getLayer('shading')) {
-    map.setPaintProperty('shading', 'raster-opacity', state.gradient ? state.shade : 0);
+    map.setPaintProperty('shading', 'raster-opacity', state.gradient ? 1 : 0);
   }
   if (map.getLayer('band-fill')) {
     map.setPaintProperty('band-fill', 'fill-opacity', state.gradient ? 0 : 0.09);

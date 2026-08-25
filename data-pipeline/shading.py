@@ -4,11 +4,10 @@ The contour bands say exactly where the 80% line runs, which is what you want if
 you are deciding where to stand.  They also, unavoidably, look like steps.  This
 writes the same quantity as a smooth image instead.
 
-MapLibre cannot colour a greyscale raster through a ramp -- ``raster-color`` is a
-Mapbox property, not one of theirs -- so the colour is baked in here and only the
-alpha varies.  That costs the ability to re-tint for a dark basemap, but a
-translucent blue sits well enough on either, and it makes the file tiny: with the
-three colour channels constant, there is almost nothing left for zlib to store.
+MapLibre has no way to colour a raster through a ramp -- ``raster-color`` is a
+Mapbox property, not one of theirs -- so what ships is a bare mask and the browser
+paints it onto a canvas before handing it over.  Colour, opacity and curve are all
+decided there, which means they can be changed without regenerating anything.
 
 Rows are spaced evenly in Web Mercator y, not in latitude, so the image drapes
 onto MapLibre's image source without any reprojection.
@@ -28,14 +27,6 @@ MERCATOR_LIMIT = 85.051129          # where Web Mercator gives up
 WORLD_CORNERS = [[-180.0, MERCATOR_LIMIT], [180.0, MERCATOR_LIMIT],
                  [180.0, -MERCATOR_LIMIT], [-180.0, -MERCATOR_LIMIT]]
 
-# A near-neutral slate rather than a colour. The shading has to sit under every
-# basemap on offer, and a blue wash over Liberty's blue oceans reads as nothing at
-# all. Neutral also leaves the colour budget to the paths, which are the subject.
-# Override with ECLIPSE_TINT="r,g,b" when trying alternatives.
-TINT = tuple(int(v) for v in os.environ.get("ECLIPSE_TINT", "51,65,85").split(","))
-MAX_ALPHA = 0.62
-GAMMA = 0.85                        # lifts the faint outer reaches into view
-
 
 def mercator_latitudes(n):
     """``n`` latitudes spaced evenly in Web Mercator, north to south."""
@@ -44,7 +35,12 @@ def mercator_latitudes(n):
 
 
 def obscuration_image(grid, width=768, height=384):
-    """PNG bytes of the obscuration field, or ``None`` if nothing is eclipsed.
+    """PNG bytes of the obscuration mask, or ``None`` if nothing is eclipsed.
+
+    A single grey channel holding obscuration itself, 0 to 255 -- no colour, no
+    opacity, no curve.  All three are decided in the browser, which recolours the
+    mask onto a canvas before handing it to the map, so the look can be changed
+    without regenerating four hundred images.
 
     Resampled from the grid the contours were traced on rather than evaluated
     afresh.  The field is smooth over thousands of kilometres, so interpolating
@@ -56,19 +52,18 @@ def obscuration_image(grid, width=768, height=384):
     obscuration = R.resample(grid, grid.obscuration, lats, lons)
     if obscuration.max() <= 0.0:
         return None
-    alpha = np.clip(obscuration, 0.0, 1.0) ** GAMMA * MAX_ALPHA * 255.0
-    return _png_rgba(TINT, alpha.astype(np.uint8))
+    return _png_grey((np.clip(obscuration, 0.0, 1.0) * 255.0).astype(np.uint8))
 
 
-def _png_rgba(rgb, alpha):
-    """Smallest useful PNG writer: constant RGB, varying alpha, 'Up' filtering."""
-    height, width = alpha.shape
-    img = np.empty((height, width, 4), np.uint8)
-    img[..., 0], img[..., 1], img[..., 2] = rgb
-    img[..., 3] = alpha
+def _png_grey(values):
+    """Smallest useful PNG writer: one 8-bit channel, 'Up' filtering.
 
-    rows = img.reshape(height, width * 4).astype(np.int16)
-    previous = np.zeros(width * 4, np.int16)
+    Greyscale rather than RGBA because the browser supplies the colour: one
+    channel is a quarter of the pixels and compresses better besides.
+    """
+    height, width = values.shape
+    rows = values.reshape(height, width).astype(np.int16)
+    previous = np.zeros(width, np.int16)
     scanlines = []
     for row in rows:
         scanlines.append(b"\x02" + ((row - previous) % 256).astype(np.uint8).tobytes())
@@ -79,6 +74,6 @@ def _png_rgba(rgb, alpha):
                 + struct.pack(">I", zlib.crc32(tag + payload) & 0xffffffff))
 
     return (b"\x89PNG\r\n\x1a\n"
-            + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0))
+            + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 0, 0, 0, 0))
             + chunk(b"IDAT", zlib.compress(b"".join(scanlines), 9))
             + chunk(b"IEND", b""))
