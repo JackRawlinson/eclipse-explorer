@@ -163,7 +163,7 @@ covers −1999 to +3000, so the pipeline will take any range inside that.
 
 ### Source data
 
-`data-pipeline/cache/` holds a bulk extract of the canon's Besselian elements
+`data-pipeline/cache/` holds the canon's Besselian elements
 ([gmiller123456/FiveMillenniumCanonOfSolarEclipses-Besselian-Elements](https://github.com/gmiller123456/FiveMillenniumCanonOfSolarEclipses-Besselian-Elements)),
 checked coefficient by coefficient against the array NASA's own page for 2024‑04‑08
 publishes. It agrees exactly, to the extract's 7 significant figures — worst-case

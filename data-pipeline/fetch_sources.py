@@ -27,9 +27,11 @@ PAUSE = 2.0
 CANON = "https://raw.githubusercontent.com/gmiller123456/" \
         "FiveMillenniumCanonOfSolarEclipses-Besselian-Elements/master/"
 
+# Only the "Extra" JSON is needed: it carries the Besselian elements *and* the
+# canon's summary row per eclipse.  The repo also publishes the same elements as
+# CSV and as plain JSON, which are easier to read by eye but redundant here.
 SOURCES = [
     (CANON + "FiveMillenniumCanonOfSolarEclipsesExtra.json", "extra.json"),
-    (CANON + "FiveMillenniumCanonOfSolarEclipses.csv", "bessel.csv"),
 ]
 
 # Verification material.  The path tables span the Delta T range on purpose: the
