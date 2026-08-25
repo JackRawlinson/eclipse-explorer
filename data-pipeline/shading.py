@@ -16,6 +16,7 @@ onto MapLibre's image source without any reprojection.
 
 from __future__ import annotations
 
+import os
 import struct
 import zlib
 
@@ -27,7 +28,11 @@ MERCATOR_LIMIT = 85.051129          # where Web Mercator gives up
 WORLD_CORNERS = [[-180.0, MERCATOR_LIMIT], [180.0, MERCATOR_LIMIT],
                  [180.0, -MERCATOR_LIMIT], [-180.0, -MERCATOR_LIMIT]]
 
-TINT = (37, 99, 235)                # a blue that reads on light and dark alike
+# A near-neutral slate rather than a colour. The shading has to sit under every
+# basemap on offer, and a blue wash over Liberty's blue oceans reads as nothing at
+# all. Neutral also leaves the colour budget to the paths, which are the subject.
+# Override with ECLIPSE_TINT="r,g,b" when trying alternatives.
+TINT = tuple(int(v) for v in os.environ.get("ECLIPSE_TINT", "51,65,85").split(","))
 MAX_ALPHA = 0.62
 GAMMA = 0.85                        # lifts the faint outer reaches into view
 

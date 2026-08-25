@@ -5,17 +5,23 @@ import * as maplibregl from './vendor/maplibre-gl.mjs';
 import { localCircumstances, toUT } from './circumstances.js';
 
 const NASA_ACK = "Eclipse Predictions by Fred Espenak, NASA's GSFC";
-const BASEMAP = {
-  light: 'https://tiles.openfreemap.org/styles/positron',
-  dark: 'https://tiles.openfreemap.org/styles/dark',
-};
+// OpenFreeMap's styles, quietest first. `dark` here means the paint palette and
+// the panels flip, not that the basemap is literally black.
+const BASEMAPS = [
+  { id: 'positron', label: 'Light', dark: false },
+  { id: 'liberty', label: 'Liberty', dark: false },
+  { id: 'bright', label: 'Bright', dark: false },
+  { id: 'fiord', label: 'Fiord', dark: true },
+  { id: 'dark', label: 'Dark', dark: true },
+];
+const styleUrl = (id) => `https://tiles.openfreemap.org/styles/${id}`;
 
 const PAINT = {
   light: {
     total: '#4c1d95', annular: '#c2410c', penumbra: '#475569',
     central: '#0f172a', centralCasing: '#ffffff',
     greatest: '#dc2626', mark: '#0f172a', markHalo: '#ffffff',
-    bandLow: '#93c5fd', bandHigh: '#1e3a8a', bandLine: '#1e40af',
+    bandLow: '#93c5fd', bandHigh: '#1e3a8a', bandLine: '#1d4ed8',
   },
   dark: {
     total: '#a78bfa', annular: '#fb923c', penumbra: '#94a3b8',
@@ -46,8 +52,12 @@ const state = {
   current: null,
   query: '',
   types: new Set(),
-  theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
-  themePinned: false,   // set once the viewer picks a side themselves
+  basemap: Math.max(0, BASEMAPS.findIndex(
+    (b) => b.id === new URLSearchParams(location.search).get('basemap'))),
+  theme: 'light',
+  // The shading is a backdrop, not the subject: the basemap has to stay legible
+  // through it. Overridable with ?shade= while picking a value.
+  shade: Number(new URLSearchParams(location.search).get('shade')) || 0.3,
   elements: null,       // Besselian elements of the selected eclipse
   version: '',          // build stamp, appended to data URLs to defeat caching
   gradient: true,       // smooth shading, versus stepped contour bands
@@ -64,7 +74,7 @@ let popup = null;
 function buildMap() {
   map = new maplibregl.Map({
     container: 'map',
-    style: BASEMAP[state.theme],
+    style: styleUrl(BASEMAPS[state.basemap].id),
     center: [0, 20],
     zoom: 1.3,
     minZoom: 0.6,
@@ -103,7 +113,7 @@ function buttonGroup() {
       div.className = 'maplibregl-ctrl maplibregl-ctrl-group';
       div.append(
         mapButton('⌖', 'Reset view to this eclipse', () => fitToCurrent()),
-        mapButton('◐', 'Switch between light and dark map', toggleTheme),
+        mapButton('◐', 'Change the basemap', cycleBasemap),
         mapButton('◍', 'Switch between flat and globe', toggleGlobe),
         mapButton('▦', 'Switch between smooth shading and stepped bands', toggleGradient),
       );
@@ -115,6 +125,7 @@ function buttonGroup() {
 
 function mapButton(glyph, title, onClick) {
   const b = document.createElement('button');
+  if (title.startsWith('Change the basemap')) b.dataset.role = 'basemap';
   b.type = 'button';
   b.className = 'map-btn';
   b.title = title;
@@ -140,26 +151,27 @@ function addEclipseLayers() {
 
   if (map.getLayer('shading')) map.removeLayer('shading');
   map.addLayer({ id: 'shading', type: 'raster', source: 'shading',
-                 paint: { 'raster-opacity': state.gradient ? 1 : 0,
+                 paint: { 'raster-opacity': state.gradient ? state.shade : 0,
                           'raster-fade-duration': 0,
                           'raster-resampling': 'linear' } });
 
   add({ id: 'band-fill', type: 'fill', filter: is('band'),
         paint: { 'fill-color': ['interpolate', ['linear'], ['get', 'level'],
                                 0.2, c.bandLow, 0.9, c.bandHigh],
-                 'fill-opacity': state.gradient ? 0 : 0.13 } });
+                 'fill-opacity': state.gradient ? 0 : 0.09 } });
   add({ id: 'band-line', type: 'line', filter: is('band'),
-        paint: { 'line-color': c.bandLine, 'line-opacity': 0.4, 'line-width': 0.8 } });
+        paint: { 'line-color': c.bandLine, 'line-opacity': 0.55, 'line-width': 0.9 } });
   add({ id: 'band-label', type: 'symbol', filter: is('band'), minzoom: 1.5,
         layout: { 'symbol-placement': 'line', 'text-field': ['concat',
                     ['to-string', ['round', ['*', ['get', 'level'], 100]]], '%'],
                   'text-size': 10, 'text-font': ['Noto Sans Regular'],
                   'symbol-spacing': 320, 'text-allow-overlap': false },
         paint: { 'text-color': c.bandLine, 'text-halo-color': c.markHalo,
-                 'text-halo-width': 1.4 } });
+                 'text-halo-width': 1.8 } });
 
   add({ id: 'penumbra-fill', type: 'fill', filter: is('penumbra'),
-        paint: { 'fill-color': c.penumbra, 'fill-opacity': 0.13 } });
+        paint: { 'fill-color': c.penumbra,
+                 'fill-opacity': state.gradient ? 0 : 0.10 } });
   add({ id: 'penumbra-line', type: 'line', filter: is('penumbra'),
         paint: { 'line-color': c.penumbra, 'line-opacity': 0.55,
                  'line-width': 1, 'line-dasharray': [3, 2] } });
@@ -215,24 +227,26 @@ function setShading(entry) {
   });
 }
 
-function toggleTheme() {
-  state.themePinned = true;
-  applyTheme(state.theme === 'dark' ? 'light' : 'dark');
-}
-
-function applyTheme(theme) {
-  state.theme = theme;
-  document.documentElement.dataset.theme = theme;   // panels follow the basemap
-  map.setStyle(BASEMAP[theme]);                     // style.load re-adds our layers
+function cycleBasemap() {
+  state.basemap = (state.basemap + 1) % BASEMAPS.length;
+  const chosen = BASEMAPS[state.basemap];
+  state.theme = chosen.dark ? 'dark' : 'light';
+  document.documentElement.dataset.theme = state.theme;   // panels follow the map
+  map.setStyle(styleUrl(chosen.id));                      // style.load re-adds ours
+  const btn = document.querySelector('.map-btn[data-role="basemap"]');
+  if (btn) btn.title = `Basemap: ${chosen.label} — click to change`;
 }
 
 function toggleGradient() {
   state.gradient = !state.gradient;
   if (map.getLayer('shading')) {
-    map.setPaintProperty('shading', 'raster-opacity', state.gradient ? 1 : 0);
+    map.setPaintProperty('shading', 'raster-opacity', state.gradient ? state.shade : 0);
   }
   if (map.getLayer('band-fill')) {
-    map.setPaintProperty('band-fill', 'fill-opacity', state.gradient ? 0 : 0.13);
+    map.setPaintProperty('band-fill', 'fill-opacity', state.gradient ? 0 : 0.09);
+  }
+  if (map.getLayer('penumbra-fill')) {
+    map.setPaintProperty('penumbra-fill', 'fill-opacity', state.gradient ? 0 : 0.10);
   }
 }
 
@@ -643,6 +657,7 @@ async function boot() {
     return;
   }
 
+  document.documentElement.dataset.theme = 'light';
   state.version = index.version || '';
   state.all = index.eclipses;
   for (const e of state.all) {
@@ -670,9 +685,6 @@ async function boot() {
   addEventListener('popstate', () => {
     const id = idFromUrl();
     if (id) select(id, { push: false });
-  });
-  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (ev) => {
-    if (!state.themePinned) applyTheme(ev.matches ? 'dark' : 'light');
   });
 
   // Select straight away rather than waiting on the map: the details, the list and

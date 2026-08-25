@@ -1,5 +1,9 @@
-# Builds the container and pushes it to GitHub's own registry, so a server can
-# pull it instead of building it.
+# On every push: run the fast checks against NASA's published tables. That job
+# takes about fifteen seconds and is what catches the geometry drifting.
+#
+# The image is NOT built on push -- it is ten minutes of data generation, and
+# quicker done locally with ./push-image.sh. Trigger this workflow by hand if you
+# want the runner to do it instead.
 #
 # After the first successful run the package is PRIVATE. Make it public once —
 # repo → Packages → eclipse-explorer → Package settings → Change visibility —
@@ -10,8 +14,12 @@ name: container
 on:
   push:
     branches: [main]
-    tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      publish:
+        description: "Also build and push the image (slow: ~16 min)"
+        type: boolean
+        default: true
 
 jobs:
   verify:
@@ -36,6 +44,10 @@ jobs:
         run: python verify_limits.py --fitted --check
 
   image:
+    # Building here takes about sixteen minutes on a two-core runner against
+    # roughly ten on a desktop, so it does not run on push any more -- use
+    # ./push-image.sh, or trigger this workflow by hand when that is not to hand.
+    if: github.event_name == 'workflow_dispatch' && inputs.publish
     needs: verify
     runs-on: ubuntu-latest
     permissions:
