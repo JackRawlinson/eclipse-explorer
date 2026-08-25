@@ -90,12 +90,39 @@ Updating is **Force Update** on the container, or Compose Up again — the workf
 keeps `:latest` current, and pinned tags (`:sha-abc1234`, `:v1.0.0`) are published
 alongside if you would rather not track the branch.
 
-If you would sooner not involve a registry:
+### Publishing the image
+
+**Through CI, which is already set up.** Push to `main`; the workflow builds and
+pushes `ghcr.io/jackrawlinson/eclipse-explorer:latest` plus a `sha-` tag. Nothing
+to configure — `GITHUB_TOKEN` already has the rights, and GHCR is free and
+unmetered for public packages.
+
+**By hand, when you want it now.** Log in once with a personal access token
+(classic) carrying `write:packages`:
+
+```sh
+docker login ghcr.io -u JackRawlinson
+./push-image.sh                    # builds, tags :latest and :sha-xxxxxxx, pushes
+```
+
+Either way the package starts **private**, and Unraid answers a private pull with
+a 403 and nothing useful in the log. Make it public once at
+*repo → Packages → eclipse-explorer → Package settings → Change visibility*.
+
+**A registry of your own** is possible — run `registry:2` on the NAS and push to
+`tower.local:5000/eclipse-mapper` — but it earns its keep only if you are already
+running one. A plain-HTTP registry is refused by Docker unless every client that
+pulls from it, Unraid's own daemon included, carries an `insecure-registries`
+entry in `/etc/docker/daemon.json`; the alternative is issuing certificates. That
+is real work to avoid a registry that is free, needs no maintenance, and is
+already holding the source.
+
+If you would sooner not involve a registry at all:
 
 - **Compose Manager plugin** — clone the repo onto the array (say
   `/mnt/user/appdata/eclipse-mapper`), point a stack at it, Compose Up. Builds on
   the NAS, ten-odd minutes.
-- **Ship a tarball** —
+- **Ship a tarball** — fine for a one-off, tedious as a habit:
   ```sh
   docker build -t eclipse-mapper . && docker save eclipse-mapper | gzip > em.tar.gz
   # on the NAS:  gunzip -c em.tar.gz | docker load
@@ -131,6 +158,7 @@ public/            the site
   vendor/            MapLibre GL JS, vendored so there is no CDN dependency
   data/              one GeoJSON and one PNG per eclipse, plus index.json
 serve.py           static server for development, with caching turned off
+push-image.sh      build and push to GHCR by hand, when CI is too slow a loop
 ```
 
 ## Regenerating the data
