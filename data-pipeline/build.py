@@ -395,6 +395,12 @@ def main(only=None):
 
     if not only:
         index.sort(key=lambda e: e["id"])
+        # Answering "what would I see from here?" means running the circumstances
+        # for every eclipse at once, so the elements ship together in one file --
+        # fetched only when that question is actually asked.
+        with open(os.path.join(config.OUTPUT_DIR, "elements.json"), "w") as fh:
+            json.dump({el.key: elements_payload(el, G.contact_times(el, True))
+                       for el, _ in catalog}, fh, separators=(",", ":"))
         with open(os.path.join(config.OUTPUT_DIR, "index.json"), "w") as fh:
             json.dump({
                 "version": version,

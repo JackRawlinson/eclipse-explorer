@@ -112,11 +112,19 @@ const state = {
   settings: loadSettings(),
   theme: 'light',
   elements: null,       // Besselian elements of the selected eclipse
+  pin: null,            // a place to ask "what is visible from here?"
+  visible: null,        // that answer, for every eclipse
+  threshold: (() => {
+    try { return localStorage.getItem('eclipse-mapper.threshold') || 'p90'; }
+    catch { return 'p90'; }
+  })(),
   version: '',          // build stamp, appended to data URLs to defeat caching
+  span: '',             // the years covered, for the list count
   globe: false,
 };
 
 const geoCache = new Map();
+let pinMarker = null;
 const maskCache = new Map();   // painted masks, keyed by source and appearance
 let shadingUrl = null;
 let layersReady = false;   // our layers exist and can be added to
@@ -431,6 +439,117 @@ function toggleGlobe() {
   state.globe = false;
 }
 
+// ------------------------------------------------ what is visible from here
+
+// How much of the Sun has to go before an eclipse is worth listing. Anything is
+// technically visible over half the planet; a three per cent bite is not an event.
+const THRESHOLDS = [
+  { id: 'central', label: 'Total or annular', test: (r) => r.central },
+  { id: 'p90', label: '90%+', test: (r) => r.obscuration >= 0.9 },
+  { id: 'p50', label: '50%+', test: (r) => r.obscuration >= 0.5 },
+  { id: 'any', label: 'Any', test: () => true },
+];
+
+let allElements = null;      // every eclipse's elements, fetched on first use
+
+async function elementsForAll() {
+  if (!allElements) {
+    allElements = await fetch(dataUrl('elements.json')).then((r) => {
+      if (!r.ok) throw new Error(`elements.json: ${r.status}`);
+      return r.json();
+    });
+  }
+  return allElements;
+}
+
+function setPin(lngLat, { push = true } = {}) {
+  state.pin = lngLat ? { lat: lngLat.lat, lon: lngLat.lng ?? lngLat.lon } : null;
+  drawPin();
+  if (push) syncUrl();
+  const at = $('pinbar-at');
+  const clear = $('place-clear');
+  const chips = $('place-threshold');
+  if (!state.pin) {
+    state.visible = null;
+    at.hidden = true;
+    clear.hidden = true;
+    chips.hidden = true;
+    $('place-locate').hidden = false;
+    $('place-why').hidden = false;
+    applyFilters();
+    return;
+  }
+  at.textContent = formatLatLon(state.pin.lat, state.pin.lon, 2);
+  at.hidden = false;
+  clear.hidden = false;
+  chips.hidden = false;
+  $('place-locate').hidden = true;
+  $('place-why').hidden = true;
+  computeVisible();
+}
+
+function drawPin() {
+  if (pinMarker) { pinMarker.remove(); pinMarker = null; }
+  if (!state.pin) return;
+  const el = document.createElement('div');
+  el.className = 'pin-marker';
+  pinMarker = new maplibregl.Marker({ element: el })
+    .setLngLat([state.pin.lon, state.pin.lat])
+    .addTo(map);
+}
+
+async function computeVisible() {
+  const pin = state.pin;
+  $('count').textContent = 'working out what is visible…';
+
+  let elements;
+  try {
+    elements = await elementsForAll();
+  } catch (err) {
+    $('count').textContent = 'Could not load the eclipse elements.';
+    console.error(err);
+    return;
+  }
+  if (state.pin !== pin) return;                 // moved on already
+
+  const seen = new Map();
+  for (const entry of state.all) {
+    const el = elements[entry.id];
+    if (!el) continue;
+    const r = localCircumstances(el, pin.lat, pin.lon);
+    if (!r || r.obscuration <= 0) continue;
+    seen.set(entry.id, {
+      obscuration: r.obscuration,
+      central: r.central,
+      total: r.total,
+      durationS: r.durationS ?? null,
+    });
+  }
+  state.visible = seen;
+  applyFilters();
+}
+
+function buildThresholds() {
+  const host = $('place-threshold');
+  host.replaceChildren();
+  for (const t of THRESHOLDS) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'chip';
+    b.textContent = t.label;
+    b.setAttribute('aria-pressed', String(state.threshold === t.id));
+    b.addEventListener('click', () => {
+      state.threshold = t.id;
+      try { localStorage.setItem('eclipse-mapper.threshold', t.id); } catch { /* fine */ }
+      for (const other of host.children) {
+        other.setAttribute('aria-pressed', String(other === b));
+      }
+      applyFilters();
+    });
+    host.append(b);
+  }
+}
+
 // ------------------------------------------------- what you would see there
 
 function closePopup() {
@@ -445,6 +564,8 @@ function showCircumstances(lngLat) {
     .setLngLat(lngLat)
     .setHTML(circumstancesHTML(seen, lngLat))
     .addTo(map);
+  popup.getElement().querySelector('[data-act="pin"]')
+    ?.addEventListener('click', () => { setPin(lngLat); closePopup(); });
 }
 
 function circumstancesHTML(s, lngLat) {
@@ -452,7 +573,9 @@ function circumstancesHTML(s, lngLat) {
   if (!s) {
     return `<p class="pop__head pop__head--none">No eclipse here</p>
             <p class="pop__note">The Sun is either untouched or below the horizon
-            throughout.</p>${where}`;
+            throughout.</p>${where}
+            <p class="pop__actions"><button type="button" class="pop__action"
+            data-act="pin">See every eclipse here</button></p>`;
   }
 
   const el = state.elements;
@@ -462,11 +585,11 @@ function circumstancesHTML(s, lngLat) {
   const head = s.durationS
     ? `<p class="pop__head pop__head--${s.total ? 'total' : 'annular'}">`
       + `${s.total ? 'Totality' : 'Annularity'} ${formatDuration(s.durationS)}</p>`
-    : `<p class="pop__head">${(s.obscuration * 100).toFixed(1)}% of the Sun covered</p>`;
+    : `<p class="pop__head">${formatObscuration(s.obscuration)} of the Sun covered</p>`;
 
   if (s.durationS) {
     rows.push([s.total ? 'Totality' : 'Annularity', `${clock(s.c2)} – ${clock(s.c3)} UT`]);
-    rows.push(['Obscuration', `${(s.obscuration * 100).toFixed(1)}%`]);
+    rows.push(['Obscuration', formatObscuration(s.obscuration)]);
   }
   rows.push(['Maximum', `${clock(s.tMax)} UT`]);
   rows.push(['Magnitude', s.magnitude.toFixed(3)]);
@@ -485,7 +608,9 @@ function circumstancesHTML(s, lngLat) {
     + rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')
     + '</dl>'
     + (notes.length ? `<p class="pop__note">${notes.join('; ')}.</p>` : '')
-    + where;
+    + where
+    + '<p class="pop__actions"><button type="button" class="pop__action" '
+    + 'data-act="pin">See every eclipse here</button></p>';
 }
 
 function hms(hours) {
@@ -530,11 +655,7 @@ async function select(id, { fit = true, push = true, replace = false } = {}) {
   $('stepper-now').textContent = formatDate(entry.date, true);
   updateStepper();
 
-  if (push) {
-    const url = `${location.pathname}?e=${id}`;
-    if (replace) history.replaceState({ id }, '', url);
-    else if (location.search !== `?e=${id}`) history.pushState({ id }, '', url);
-  }
+  if (push) syncUrl({ replace });
 
   const token = ++loadToken;
   $('info').classList.add('is-busy');
@@ -553,6 +674,26 @@ async function select(id, { fit = true, push = true, replace = false } = {}) {
   } finally {
     if (token === loadToken) $('info').classList.remove('is-busy');
   }
+}
+
+/** The URL carries the selection and any pinned place, so a view is shareable. */
+function syncUrl({ replace = false } = {}) {
+  const q = new URLSearchParams();
+  if (state.current) q.set('e', state.current.id);
+  if (state.pin) q.set('at', `${state.pin.lat.toFixed(4)},${state.pin.lon.toFixed(4)}`);
+  const url = `${location.pathname}?${q}`;
+  if (replace || url === location.pathname + location.search) {
+    history.replaceState({}, '', url);
+  } else {
+    history.pushState({}, '', url);
+  }
+}
+
+function pinFromUrl() {
+  const at = new URLSearchParams(location.search).get('at');
+  if (!at) return null;
+  const [lat, lon] = at.split(',').map(Number);
+  return Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lng: lon } : null;
 }
 
 function fitTo(entry) {
@@ -611,8 +752,13 @@ function updateStepper() {
 
 function applyFilters() {
   const q = state.query.trim().toLowerCase();
+  const rule = THRESHOLDS.find((t) => t.id === state.threshold) || THRESHOLDS[0];
   state.shown = state.all.filter((e) => {
     if (state.types.size && !state.types.has(e.type)) return false;
+    if (state.visible) {
+      const here = state.visible.get(e.id);
+      if (!here || !rule.test(here)) return false;
+    }
     return !q || e.search.includes(q);
   });
   renderList();
@@ -628,13 +774,21 @@ function renderList() {
     b.type = 'button';
     b.dataset.id = e.id;
     b.title = `${formatDate(e.date)} — ${e.type} (${e.typeCode}), saros ${e.saros}`;
-    b.innerHTML = `<span class="list__date">${formatDate(e.date, true)}</span>`
+    const here = state.visible?.get(e.id);
+    const much = here
+      ? (here.durationS
+          ? `<span class="list__much list__much--central">${formatDuration(here.durationS)}</span>`
+          : `<span class="list__much">${formatObscuration(here.obscuration)}</span>`)
+      : '';
+    b.innerHTML = `<span class="list__date">${formatDate(e.date, true)}</span>${much}`
       + `<span class="badge badge--${e.type}">${e.type.slice(0, 3)}</span>`;
     li.append(b);
     frag.append(li);
   }
   ul.replaceChildren(frag);
-  $('count').textContent = `${state.shown.length} of ${state.all.length} eclipses`;
+  $('count').textContent = state.visible
+    ? `${state.shown.length} visible from here, ${state.span}`
+    : `${state.shown.length} of ${state.all.length} eclipses, ${state.span}`;
   markCurrentInList();
 }
 
@@ -654,8 +808,6 @@ function markCurrentInList() {
 // -------------------------------------------------------------- the facts
 
 function renderInfo(e) {
-  $('info-title').textContent = formatDate(e.date);
-
   const rows = [
     ['Type', `${titleCase(e.type)}<span class="facts__code"> (${e.typeCode})</span>`],
     ['Magnitude', e.magnitude.toFixed(4)],
@@ -735,6 +887,13 @@ function formatLatLon(lat, lon, dp = 1) {
   const ns = lat >= 0 ? 'N' : 'S';
   const ew = lon >= 0 ? 'E' : 'W';
   return `${Math.abs(lat).toFixed(dp)}°${ns} ${Math.abs(lon).toFixed(dp)}°${ew}`;
+}
+
+/** Never round a near-miss up to 100%: that is the one number that means totality. */
+function formatObscuration(v) {
+  const pct = v * 100;
+  if (pct >= 99.5 && v < 1) return '>99%';
+  return `${Math.round(pct)}%`;
 }
 
 const signed = (v, dp) => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(dp);
@@ -841,6 +1000,35 @@ function shadingOnly() {
   }
 }
 
+/**
+ * Ask the browser where we are. The prompt itself gives no reason, so say why
+ * first; and the answer is used in this tab and nothing else -- no request
+ * carries it, and it is not written to storage.
+ */
+function useMyLocation() {
+  const btn = $('place-locate');
+  if (!navigator.geolocation) {
+    btn.textContent = 'Location unavailable';
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = 'Asking…';
+  navigator.geolocation.getCurrentPosition(
+    ({ coords }) => {
+      btn.disabled = false;
+      btn.textContent = 'Use my location';
+      setPin({ lat: coords.latitude, lng: coords.longitude });
+      map.flyTo({ center: [coords.longitude, coords.latitude], zoom: 4, duration: 900 });
+    },
+    (err) => {
+      btn.disabled = false;
+      btn.textContent = err.code === err.PERMISSION_DENIED
+        ? 'Permission denied' : 'Could not locate you';
+    },
+    { enableHighAccuracy: false, timeout: 10000, maximumAge: 600000 },
+  );
+}
+
 // ------------------------------------------------------------------ chrome
 
 function buildChips() {
@@ -868,23 +1056,14 @@ function wirePanels() {
       const panel = $(btn.dataset.panel);
       const collapsed = panel.classList.toggle('is-collapsed');
       btn.setAttribute('aria-expanded', String(!collapsed));
-      if (!collapsed && narrow()) {
-        // on a phone the sheets would cover the map, so only one opens at a time
-        for (const other of document.querySelectorAll('.panel')) {
-          if (other === panel) continue;
-          other.classList.add('is-collapsed');
-          other.querySelector('.panel__toggle').setAttribute('aria-expanded', 'false');
-        }
-      }
     });
   }
+  // On a phone the sheet would cover most of the map, so it starts shut. The
+  // header keeps the stepper, so eclipses can still be stepped through.
   if (narrow()) {
-    // On a phone the sheets would cover most of the map, so both start shut and
-    // only one opens at a time.
-    for (const panel of document.querySelectorAll('.panel')) {
-      panel.classList.add('is-collapsed');
-      panel.querySelector('.panel__toggle').setAttribute('aria-expanded', 'false');
-    }
+    const panel = $('picker');
+    panel.classList.add('is-collapsed');
+    panel.querySelector('.panel__toggle').setAttribute('aria-expanded', 'false');
   }
 }
 
@@ -934,11 +1113,12 @@ async function boot() {
     e.search = `${e.date} ${formatDate(e.date, true)} ${e.type} saros ${e.saros}`.toLowerCase();
   }
   state.shown = index.eclipses;
-  $('range').textContent = `${index.range[0]}–${index.range[1]}`;
+  state.span = `${index.range[0]}–${index.range[1]}`;
 
   buildMap();
   buildSettings();
   buildChips();
+  buildThresholds();
   wirePanels();
   wireKeys();
   renderList();
@@ -949,6 +1129,8 @@ async function boot() {
     const b = ev.target.closest('button[data-id]');
     if (b) select(b.dataset.id);
   });
+  $('place-clear').addEventListener('click', () => setPin(null));
+  $('place-locate').addEventListener('click', useMyLocation);
   $('search').addEventListener('input', (ev) => {
     state.query = ev.target.value;
     applyFilters();
@@ -956,14 +1138,21 @@ async function boot() {
   addEventListener('popstate', () => {
     const id = idFromUrl();
     if (id) select(id, { push: false });
+    setPin(pinFromUrl(), { push: false });
   });
 
   // Select straight away rather than waiting on the map: the details, the list and
   // the URL should all work even if the tile server is unreachable.  Geometry that
   // arrives before the style is ready is picked up again on 'style.load'.
+  // Read the pin before selecting: select() rewrites the URL from state, and
+  // would drop `at=` before we ever looked at it.
+  const startPin = pinFromUrl();
   const start = idFromUrl() || defaultId();
   select(start, { replace: true, fit: false });
-  map.once('load', fitToCurrent);
+  map.once('load', () => {
+    fitToCurrent();
+    if (startPin) setPin(startPin, { push: false });
+  });
 }
 
 boot();

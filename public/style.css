@@ -96,15 +96,38 @@ html, body {
   overflow: hidden;
 }
 
-.panel--picker { flex: 1 1 auto; min-height: 7rem; }
-.panel--info   { flex: 0 0 auto; max-height: 64%; }
+.panel--main { flex: 1 1 auto; min-height: 0; }
 .panel.is-collapsed { flex: 0 0 auto; max-height: none; min-height: 0; }
+
+/* One panel, two scroll areas: the list, and the details beneath it. The header
+   keeps the stepper, so an eclipse can be changed without opening anything. */
+.panel--main .panel__body {
+  gap: 0; padding: 0;
+  overflow: hidden;        /* the two regions inside do their own scrolling */
+}
+
+.picker {
+  flex: 1 1 auto;
+  min-height: 6rem;        /* enough for the controls; the list takes what is left */
+  display: flex; flex-direction: column; gap: .55rem;
+  padding: .7rem .9rem .6rem;
+}
+
+.details {
+  flex: 0 0 auto;
+  max-height: 42%;
+  overflow-y: auto;
+  border-top: 1px solid var(--line);
+  padding: .7rem .9rem .8rem;
+  display: flex; flex-direction: column; gap: .55rem;
+}
+.details.is-busy { opacity: .5; }
 
 .panel__head {
   display: flex;
   align-items: center;
-  gap: .5rem;
-  padding: .7rem .5rem .7rem .9rem;
+  gap: .35rem;
+  padding: .5rem .5rem .5rem .55rem;
   border-bottom: 1px solid var(--line);
 }
 
@@ -151,10 +174,8 @@ html, body {
 
 /* --------------------------------------------------------------- stepper */
 
-.stepper { display: flex; align-items: stretch; gap: .4rem; }
-
 .stepper__btn {
-  flex: none; width: 2.2rem;
+  flex: none; width: 2rem; height: 1.9rem;
   border: 1px solid var(--line); border-radius: 8px;
   background: var(--bg); color: var(--ink);
   font-size: 1.1rem; line-height: 1; cursor: pointer;
@@ -166,7 +187,7 @@ html, body {
   flex: 1; display: grid; place-items: center;
   border-radius: 8px; background: var(--bg-sunk);
   font-size: .85rem; font-weight: 600; font-variant-numeric: tabular-nums;
-  padding: .35rem .5rem; text-align: center;
+  padding: .3rem .5rem; text-align: center; min-width: 0;
 }
 
 /* ---------------------------------------------------------- search, chips */
@@ -277,7 +298,7 @@ html, body {
 
 /* --------------------------------------------------------------- loading */
 
-.panel--info.is-busy .panel__body { opacity: .5; }
+
 
 /* --------------------------------------------------------- narrow screens */
 
@@ -288,13 +309,12 @@ html, body {
     top: auto;
     left: .5rem; right: .5rem; bottom: .5rem;
     width: auto; max-width: none;
-    max-height: 62vh;
-    flex-direction: column-reverse;   /* details sit above the list */
+    max-height: 68vh;
     gap: .5rem;
   }
-  .panel--picker { flex: 1 1 auto; min-height: 7rem; }
-  .panel--info   { max-height: 55%; }
-  .list { max-height: 40vh; }
+  .panel--main { flex: 1 1 auto; min-height: 0; }
+  .details { max-height: 38%; }
+  .list { max-height: 34vh; }
 }
 
 /* ------------------------------------------------ local circumstances popup */
@@ -442,3 +462,72 @@ html, body {
 .maplibregl-ctrl-group .map-btn svg { width: 17px; height: 17px; display: block; }
 .maplibregl-ctrl-group .map-btn:hover { background: var(--bg-sunk); }
 .maplibregl-ctrl-group .map-btn[aria-pressed="true"] { color: #fff; background: var(--accent); }
+
+/* --------------------------------------------------- what is visible here */
+
+.panel--place { flex: 1 1 auto; min-height: 7rem; }
+.panel--place[hidden] { display: none; }
+
+.panel__clear {
+  flex: none; width: 1.6rem; height: 1.6rem;
+  border: 0; border-radius: 6px; background: transparent;
+  color: var(--ink-dim); font-size: 1.05rem; line-height: 1; cursor: pointer;
+}
+.panel__clear:hover { background: var(--bg-sunk); color: var(--ink); }
+
+.list--place button { align-items: center; }
+.list__when { font-variant-numeric: tabular-nums; flex: 1; }
+.list__much {
+  font-size: .72rem; font-variant-numeric: tabular-nums;
+  color: var(--ink-dim); flex: none; margin-right: .35rem;
+}
+.list button[aria-current="true"] .list__much { color: rgba(255, 255, 255, .8); }
+.list__much--central { color: var(--total); font-weight: 600; }
+.list button[aria-current="true"] .list__much--central { color: #fff; }
+
+.place__empty { margin: .4rem 0; font-size: .78rem; color: var(--ink-dim); }
+
+.pin-marker {
+  width: 15px; height: 15px; border-radius: 50%;
+  background: var(--greatest); border: 2.5px solid #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .45);
+}
+
+.pop__actions { margin: .45rem 0 0; display: flex; gap: .4rem; }
+.pop__action {
+  border: 1px solid var(--line); border-radius: 7px;
+  background: var(--bg); color: var(--ink);
+  font: inherit; font-size: .74rem; padding: .22rem .55rem; cursor: pointer;
+}
+.pop__action:hover { background: var(--bg-sunk); }
+
+.place__why { margin: 0; font-size: .7rem; line-height: 1.4; color: var(--ink-dim); }
+
+/* ------------------------------------------------- filtering by a place */
+
+.pinbar { display: flex; align-items: center; gap: .4rem; }
+
+.pinbar__use {
+  border: 1px solid var(--line); border-radius: 8px;
+  background: var(--bg); color: var(--ink);
+  font: inherit; font-size: .78rem; padding: .3rem .6rem; cursor: pointer;
+}
+.pinbar__use:hover { background: var(--bg-sunk); }
+.pinbar__use:disabled { opacity: .6; cursor: default; }
+
+.pinbar__at {
+  flex: 1; min-width: 0;
+  font-size: .78rem; font-weight: 600; font-variant-numeric: tabular-nums;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pinbar__at[hidden] { display: none; }
+
+.pinbar__clear {
+  flex: none; width: 1.5rem; height: 1.5rem;
+  border: 0; border-radius: 6px; background: transparent;
+  color: var(--ink-dim); font-size: 1rem; line-height: 1; cursor: pointer;
+}
+.pinbar__clear:hover { background: var(--bg-sunk); color: var(--ink); }
+.pinbar__clear[hidden] { display: none; }
+
+#place-threshold[hidden] { display: none; }
