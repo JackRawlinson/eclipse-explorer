@@ -55,37 +55,68 @@ echo "Deploying $FILES files from public/ to $NAME"
   --branch "$BRANCH" \
   --commit-dirty=true
 
-# A deployment can come back "complete" and serve nothing: the assets upload
-# fine and the manifest ends up empty, which looks like a healthy deploy from
-# here and like a dead site from a browser. So the deploy is not finished until
-# the live site has answered for itself.
+# A deployment can come back "complete", report every file already uploaded,
+# and then serve almost nothing: the assets are in the store but the manifest
+# that goes live is short. From here that is indistinguishable from a good
+# deploy. It has happened twice, and both times it was found by someone opening
+# the site rather than by anything here.
+#
+# So the live site is sampled properly. An earlier version of this checked nine
+# fixed paths and passed while 453 of 454 eclipses were missing, because one of
+# the nine happened to be the file that survived. Sampling at random across each
+# kind of file is the difference between a check and the appearance of one.
 SITE="${CF_PAGES_SITE:-https://eclipse.tsbf.uk}"
+
+sample_paths() {
+  printf '%s\n' / /app.js /style.css /circumstances.js /data/index.json \
+                 /data/elements.json /sitemap.xml /robots.txt /eclipse/
+  ls public/data/*.geojson | xargs -n1 basename | sed 's/\.geojson//' \
+    | shuf -n 25 | sed 's|^|/data/|; s|$|.geojson|'
+  ls public/preview/*.png | xargs -n1 basename | sed 's/\.png//' \
+    | shuf -n 10 | sed 's|^|/preview/|; s|$|.png|'
+  ls -d public/eclipse/*-*/ | xargs -n1 basename | shuf -n 10 \
+    | sed 's|^|/eclipse/|; s|$|/|'
+  ls -d public/eclipse/[0-9][0-9][0-9][0-9]/ | xargs -n1 basename | shuf -n 5 \
+    | sed 's|^|/eclipse/|; s|$|/|'
+}
+
+check_site() {
+  sample_paths | xargs -P 4 -I@ sh -c \
+    "printf '%s %s\\n' '@' \"\$(curl -sS -o /dev/null -w '%{http_code}' '$SITE@')\"" \
+    > "$REPORT" 2>&1
+  awk '$2 != 200' "$REPORT" | wc -l
+}
+
+REPORT="$(mktemp)"
+trap 'rm -f "$REPORT"' EXIT
+
 echo
 echo "Checking $SITE"
 sleep 4
-FAILED=0
-for path in / /app.js /style.css /data/index.json /sitemap.xml /eclipse/ \
-            /eclipse/2027/ /eclipse/2027-08-02/ /preview/20270802.png; do
-  code="$(curl -sS -o /dev/null -w '%{http_code}' "$SITE$path" || echo 000)"
-  if [ "$code" = "200" ]; then
-    printf '  %-26s %s\n' "$path" "$code"
-  else
-    printf '  %-26s %s   <-- NOT SERVING\n' "$path" "$code"
-    FAILED=1
-  fi
-done
+BAD="$(check_site)"
 
-if [ "$FAILED" = "1" ]; then
+if [ "$BAD" != "0" ]; then
+  echo "  $BAD of $(wc -l < "$REPORT") sampled paths are not being served. Redeploying once." >&2
+  "${WRANGLER[@]}" pages deploy public --project-name "$NAME" \
+    --branch "$BRANCH" --commit-dirty=true >/dev/null 2>&1
+  sleep 5
+  BAD="$(check_site)"
+fi
+
+if [ "$BAD" != "0" ]; then
+  awk '$2 != 200 {printf "  %-34s %s\n", $1, $2}' "$REPORT" | head -12 >&2
   cat >&2 <<BROKEN
 
-Some paths are not being served. The upload can succeed while the deployment
-that goes live is empty; a second run of this script usually replaces it. If it
-does not, roll back to a known good deployment in the dashboard:
+$BAD of $(wc -l < "$REPORT") sampled paths are still not being served, after a
+second attempt. The upload succeeds while the deployment that goes live is
+short, so roll back to a known good one:
 
-    Workers & Pages -> $NAME -> Deployments
+    Workers & Pages -> $NAME -> Deployments -> (a working one) -> Rollback
 BROKEN
   exit 1
 fi
+
+echo "  all $(wc -l < "$REPORT") sampled paths served"
 
 cat <<DONE
 
