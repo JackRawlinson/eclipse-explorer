@@ -7,3 +7,14 @@ __pycache__/
 # and by the container build. Commit it instead if you would rather deploy
 # public/ straight to a static host without running anything.
 public/data/
+
+# Generated alongside public/data: a page and a share image per eclipse,
+# and the sitemap listing them. Same reasoning as public/data above.
+public/eclipse/
+public/preview/
+public/sitemap.xml
+
+# Wrangler drops a cache here when deploying. It holds no credentials -- those
+# live in ~/.config/.wrangler -- but it does record the Cloudflare account id
+# and the account's display name, which is an email address.
+.wrangler/
