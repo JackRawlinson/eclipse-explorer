@@ -125,10 +125,6 @@ def render_page(template, entry, base_url):
     url, image, title, desc = _head(entry, base_url)
     page = template
 
-    # Assets are referenced relatively and this page is two directories down.
-    page = page.replace("<meta charset=\"utf-8\">",
-                        "<meta charset=\"utf-8\">\n<base href=\"/\">", 1)
-
     page = re.sub(r"<title>.*?</title>",
                   f"<title>{html.escape(title)}</title>", page, count=1, flags=re.S)
     page = re.sub(r'<meta name="description" content="[^"]*">',

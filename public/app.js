@@ -1015,8 +1015,12 @@ const hoursOf = (text) => {
 // ------------------------------------------------------------------ data
 
 /** Data URLs carry the build stamp, so a rebuild is never served from cache. */
+// Rooted, not relative. Selecting an eclipse rewrites the address to
+// /eclipse/<date>/, and a relative path would then be resolved against that --
+// asking for /eclipse/2027-08-02/data/... and getting nothing back. The
+// pre-rendered pages carry a <base> that hid this; the map at the root did not.
 const dataUrl = (name) =>
-  `data/${name}${state.version ? `?v=${encodeURIComponent(state.version)}` : ''}`;
+  `/data/${name}${state.version ? `?v=${encodeURIComponent(state.version)}` : ''}`;
 
 async function loadGeometry(id) {
   if (geoCache.has(id)) return geoCache.get(id);
@@ -1535,7 +1539,7 @@ async function boot() {
   let index;
   try {
     // revalidate the index every time: it is what tells us the current build
-    index = await fetch('data/index.json', { cache: 'no-cache' }).then((r) => {
+    index = await fetch('/data/index.json', { cache: 'no-cache' }).then((r) => {
       if (!r.ok) throw new Error(r.status);
       return r.json();
     });
