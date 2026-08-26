@@ -40,14 +40,29 @@ cat <<DONE
 Pushed:
     $IMAGE:$TAG
     $IMAGE:sha-$SHA
+DONE
 
-The package is PRIVATE until you say otherwise. Unraid will get a 403 with
-nothing helpful in the log. Make it public once, at:
+# Visibility is a property of the package rather than of a push, so it is worth
+# reporting rather than assuming. A package first published by Actions inherits
+# the repository's visibility; one pushed by hand starts out private, and then a
+# pull from the NAS fails with a 403 and nothing useful in the log.
+VISIBILITY="$(gh api "/user/packages/container/$NAME" --jq .visibility 2>/dev/null || true)"
+case "$VISIBILITY" in
+  public)  echo "The package is public. Nothing else to do." ;;
+  private) cat <<PRIVATE
+The package is PRIVATE. Unraid will get a 403 with nothing helpful in the log.
+Make it public once, at:
 
     https://github.com/$OWNER/$NAME/pkgs/container/$NAME
 
-  → Package settings → Change visibility → Public
+  -> Package settings -> Change visibility -> Public
+PRIVATE
+    ;;
+  *) echo "Could not read the package visibility (needs gh, logged in with read:packages)." ;;
+esac
 
-Then on the NAS: Docker → Add Container, Repository = $IMAGE:$TAG,
-port 8080 → 80.
-DONE
+cat <<NEXT
+
+On the NAS: Docker -> Check for Updates, then Update on the container. First
+time round: Add Container, Repository = $IMAGE:$TAG, port 8080 -> 80.
+NEXT
