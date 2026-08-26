@@ -174,7 +174,7 @@ def render_list(entries, base_url):
         links = "".join(
             f'<li><a href="/eclipse/{slug(e)}/">{html.escape(title_for(e))}</a></li>'
             for e in by_year[year])
-        blocks.append(f"<h2>{year}</h2><ul>{links}</ul>")
+        blocks.append(f'<h2><a href="/eclipse/{year}/">{year}</a></h2><ul>{links}</ul>')
     body = "".join(blocks)
 
     title = "Every solar eclipse, 1900 to 2100"
@@ -203,8 +203,67 @@ the map. <a href="/">Open the map</a>.</p>
 """
 
 
+def render_year(year, entries, base_url):
+    """A page for one year's eclipses.
+
+    A search for "2027 eclipse" has several answers whenever a year holds more
+    than one, and left to itself it is arbitrary which of them turns up. A page
+    about the year is the honest answer to that question: it names them all,
+    says which is which, and sends you to the one you meant.
+    """
+    listed = "".join(
+        f'<li><a href="/eclipse/{slug(e)}/">{html.escape(title_for(e))}</a>'
+        f'<span class="year__note">{html.escape(_summary(e))}</span></li>'
+        for e in entries)
+    kinds = ", ".join(f"{TYPE_NAMES[e['type']].lower()} on "
+                      f"{long_date(e['date']).rsplit(' ', 1)[0]}" for e in entries)
+    count = len(entries)
+    # Only promise paths if any of them has one.
+    central = any(e["type"] != "partial" for e in entries)
+    offers = ("Paths, times and how much of the Sun is covered." if central
+              else "Times, and how much of the Sun is covered.")
+    desc = (f"{count} solar eclipse{'s' if count != 1 else ''} in {year}: "
+            f"{kinds}. {offers}")
+    title = f"Solar eclipses in {year}"
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{title}</title>
+<meta name="description" content="{html.escape(desc, quote=True)}">
+<link rel="canonical" href="{base_url}/eclipse/{year}/">
+<meta property="og:title" content="{title}">
+<meta property="og:description" content="{html.escape(desc, quote=True)}">
+<meta property="og:image" content="{base_url}/preview/{entries[0]['id']}.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body class="listing">
+<main>
+<h1>{title}</h1>
+<p>{html.escape(desc)}</p>
+<ul class="year">{listed}</ul>
+<p><a href="/eclipse/">Every eclipse, 1900 to 2100</a> &middot; <a href="/">Open the map</a></p>
+</main>
+</body>
+</html>
+"""
+
+
+def _summary(entry):
+    longest = duration(entry.get("centralDurationS"))
+    if entry["type"] == "partial":
+        return "no path of totality; deepest near " + lat_lon(
+            entry["greatest"]["lat"], entry["greatest"]["lon"])
+    noun = "annularity" if entry["type"] == "annular" else "totality"
+    return f"up to {longest} of {noun}" if longest else "central eclipse"
+
+
 def render_sitemap(entries, base_url):
+    years = sorted({e["date"][:4] for e in entries})
     urls = [f"{base_url}/", f"{base_url}/eclipse/"]
+    urls += [f"{base_url}/eclipse/{y}/" for y in years]
     urls += [f"{base_url}/eclipse/{slug(e)}/" for e in entries]
     body = "".join(f"<url><loc>{u}</loc></url>" for u in urls)
     return ('<?xml version="1.0" encoding="UTF-8"?>'
@@ -223,13 +282,22 @@ def write_all(entries, public_dir, base_url):
         with open(os.path.join(directory, "index.html"), "w") as fh:
             fh.write(render_page(template, entry, base_url))
 
+    by_year = {}
+    for entry in entries:
+        by_year.setdefault(entry["date"][:4], []).append(entry)
+    for year, group in by_year.items():
+        directory = os.path.join(public_dir, "eclipse", year)
+        os.makedirs(directory, exist_ok=True)
+        with open(os.path.join(directory, "index.html"), "w") as fh:
+            fh.write(render_year(year, group, base_url))
+
     listing = os.path.join(public_dir, "eclipse")
     os.makedirs(listing, exist_ok=True)
     with open(os.path.join(listing, "index.html"), "w") as fh:
         fh.write(render_list(entries, base_url))
     with open(os.path.join(public_dir, "sitemap.xml"), "w") as fh:
         fh.write(render_sitemap(entries, base_url))
-    return len(entries) + 2
+    return len(entries) + len(by_year) + 2
 
 
 # Run on its own, the pages are rebuilt from an index that already exists. That
