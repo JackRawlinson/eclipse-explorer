@@ -123,6 +123,16 @@ def render_page(template, entry, base_url):
     url, image, title, desc = _head(entry, base_url)
     page = template
 
+    # A partial keeps its page, because the address bar will show it and a
+    # reload or a shared link has to land somewhere, but it is kept out of the
+    # search results: there is no path to see, and a hundred and fifty-five of
+    # them would crowd out the ones people are actually looking for. `follow`
+    # rather than `none`, so the links out of it still count.
+    if entry["type"] == "partial":
+        page = page.replace(
+            '<meta name="color-scheme"',
+            '<meta name="robots" content="noindex,follow">\n<meta name="color-scheme"', 1)
+
     # Assets are referenced relatively and this page is two directories down.
     page = page.replace("<meta charset=\"utf-8\">",
                         "<meta charset=\"utf-8\">\n<base href=\"/\">", 1)
@@ -202,8 +212,10 @@ the map. <a href="/">Open the map</a>.</p>
 
 
 def render_sitemap(entries, base_url):
+    """Only the eclipses worth offering: the ones with a path to go and see."""
     urls = [f"{base_url}/", f"{base_url}/eclipse/"]
-    urls += [f"{base_url}/eclipse/{slug(e)}/" for e in entries]
+    urls += [f"{base_url}/eclipse/{slug(e)}/"
+             for e in entries if e["type"] != "partial"]
     body = "".join(f"<url><loc>{u}</loc></url>" for u in urls)
     return ('<?xml version="1.0" encoding="UTF-8"?>'
             '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
