@@ -69,7 +69,7 @@ SITE="${CF_PAGES_SITE:-https://eclipse.tsbf.uk}"
 
 sample_paths() {
   printf '%s\n' / /app.js /style.css /circumstances.js /data/index.json \
-                 /data/elements.json /robots.txt /404.html
+                 /data/elements.json /robots.txt
   ls public/data/*.geojson | xargs -n1 basename | sed 's/\.geojson//' \
     | shuf -n 25 | sed 's|^|/data/|; s|$|.geojson|'
   ls public/data/*.png | xargs -n1 basename | sed 's/\.png//' \
