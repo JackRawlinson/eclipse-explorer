@@ -1,3 +1,5 @@
 # Everything here is public and static. Nothing to keep crawlers out of.
 User-agent: *
 Allow: /
+
+Sitemap: https://eclipse.tsbf.uk/sitemap.xml

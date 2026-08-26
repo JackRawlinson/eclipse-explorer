@@ -17,6 +17,8 @@ from shapely.geometry import MultiPolygon, Polygon
 import besselian as B
 import config
 import geometry as G
+import pages
+import preview
 import raster as R
 import shading
 
@@ -361,6 +363,10 @@ def _bbox_of(geom):
 
 # --------------------------------------------------------------------------
 
+PUBLIC_DIR = os.path.dirname(config.OUTPUT_DIR)
+PREVIEW_DIR = os.path.join(PUBLIC_DIR, "preview")
+
+
 def main(only=None):
     os.makedirs(config.OUTPUT_DIR, exist_ok=True)
     catalog = [(e, x) for e, x in B.load_catalog()
@@ -387,6 +393,13 @@ def main(only=None):
                 fh.write(shade)
             total_bytes += len(shade)
             entry["shading"] = True
+        # The share image for this eclipse's own page, drawn from the geometry
+        # that was just computed rather than from a screenshot of the site.
+        os.makedirs(PREVIEW_DIR, exist_ok=True)
+        shot = preview.render(collection, entry)
+        with open(os.path.join(PREVIEW_DIR, f"{el.key}.png"), "wb") as fh:
+            fh.write(shot)
+        total_bytes += len(shot)
         index.append(entry)
         if n % 25 == 0 or n == len(catalog):
             rate = n / max(1e-9, time.time() - started)
@@ -410,6 +423,12 @@ def main(only=None):
                 "count": len(index),
                 "eclipses": index,
             }, fh, separators=(",", ":"))
+
+        # A page each, a list linking them, and a sitemap. Written last because
+        # they are built from the finished index rather than from the elements.
+        written = pages.write_all(index, PUBLIC_DIR, config.BASE_URL)
+        print(f"  wrote {written} pages under {PUBLIC_DIR}/eclipse/", flush=True)
+
     print(f"done: {len(index)} eclipses, {total_bytes / 1024 / 1024:.1f} MB total, "
           f"{time.time() - started:.0f}s")
 

@@ -21,11 +21,13 @@ NAME="${CF_PAGES_PROJECT:-eclipse}"
 BRANCH="${CF_PAGES_BRANCH:-main}"
 WRANGLER=(npx --yes wrangler@latest)
 
-if [ ! -s public/data/index.json ]; then
-  echo "public/data/index.json is missing. Run the pipeline first:" >&2
-  echo "    python data-pipeline/build.py" >&2
-  exit 1
-fi
+for required in public/data/index.json public/sitemap.xml public/eclipse/index.html; do
+  if [ ! -s "$required" ]; then
+    echo "$required is missing. Run the pipeline first:" >&2
+    echo "    python data-pipeline/build.py" >&2
+    exit 1
+  fi
+done
 
 if "${WRANGLER[@]}" whoami 2>&1 | grep -qi "not authenticated"; then
   echo "Not authenticated to Cloudflare. Run one of:" >&2
