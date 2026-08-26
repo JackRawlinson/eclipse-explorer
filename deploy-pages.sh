@@ -21,7 +21,7 @@ NAME="${CF_PAGES_PROJECT:-eclipse}"
 BRANCH="${CF_PAGES_BRANCH:-main}"
 WRANGLER=(npx --yes wrangler@latest)
 
-for required in public/data/index.json public/sitemap.xml public/eclipse/index.html; do
+for required in public/data/index.json public/data/elements.json; do
   if [ ! -s "$required" ]; then
     echo "$required is missing. Run the pipeline first:" >&2
     echo "    python data-pipeline/build.py" >&2
@@ -69,23 +69,13 @@ SITE="${CF_PAGES_SITE:-https://eclipse.tsbf.uk}"
 
 sample_paths() {
   printf '%s\n' / /app.js /style.css /circumstances.js /data/index.json \
-                 /data/elements.json /sitemap.xml /robots.txt /eclipse/
+                 /data/elements.json /robots.txt /404.html
   ls public/data/*.geojson | xargs -n1 basename | sed 's/\.geojson//' \
     | shuf -n 25 | sed 's|^|/data/|; s|$|.geojson|'
-  ls public/preview/*.png | xargs -n1 basename | sed 's/\.png//' \
-    | shuf -n 10 | sed 's|^|/preview/|; s|$|.png|'
-  ls -d public/eclipse/*-*/ | xargs -n1 basename | shuf -n 10 \
-    | sed 's|^|/eclipse/|; s|$|/|'
-  ls -d public/eclipse/[0-9][0-9][0-9][0-9]/ | xargs -n1 basename | shuf -n 5 \
-    | sed 's|^|/eclipse/|; s|$|/|'
+  ls public/data/*.png | xargs -n1 basename | sed 's/\.png//' \
+    | shuf -n 10 | sed 's|^|/data/|; s|$|.png|'
 }
 
-# Every request carries a query nobody has asked for before, so none of them can
-# be answered from the CDN's cache. Without that this measures the cache rather
-# than the deployment: a checkout of the site can report every path healthy
-# while the deployment behind it serves nothing, because the edge still holds
-# what the last good one gave it. That is exactly what happened -- 454 paths
-# reported as served, all of them cache, none of them there.
 check_site() {
   BUST="cb=$(date +%s)$$"
   sample_paths | xargs -P 4 -I@ sh -c \

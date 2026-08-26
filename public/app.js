@@ -1015,12 +1015,8 @@ const hoursOf = (text) => {
 // ------------------------------------------------------------------ data
 
 /** Data URLs carry the build stamp, so a rebuild is never served from cache. */
-// Rooted, not relative. Selecting an eclipse rewrites the address to
-// /eclipse/<date>/, and a relative path would then be resolved against that --
-// asking for /eclipse/2027-08-02/data/... and getting nothing back. The
-// pre-rendered pages carry a <base> that hid this; the map at the root did not.
 const dataUrl = (name) =>
-  `/data/${name}${state.version ? `?v=${encodeURIComponent(state.version)}` : ''}`;
+  `data/${name}${state.version ? `?v=${encodeURIComponent(state.version)}` : ''}`;
 
 async function loadGeometry(id) {
   if (geoCache.has(id)) return geoCache.get(id);
@@ -1077,10 +1073,9 @@ async function select(id, { fit = true, push = true, replace = false } = {}) {
 /** The URL carries the selection and any pinned place, so a view is shareable. */
 function syncUrl({ replace = false } = {}) {
   const q = new URLSearchParams();
+  if (state.current) q.set('e', state.current.id);
   if (state.pin) q.set('at', `${state.pin.lat.toFixed(4)},${state.pin.lon.toFixed(4)}`);
-  const query = q.toString();
-  const path = state.current ? `/eclipse/${state.current.date}/` : '/';
-  const url = query ? `${path}?${query}` : path;
+  const url = `${location.pathname}?${q}`;
   if (replace || url === location.pathname + location.search) {
     history.replaceState({}, '', url);
   } else {
@@ -1249,10 +1244,6 @@ function renderInfo(e) {
     `<dl class="facts ${cls || ''}">`
     + rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')
     + '</dl>';
-
-  // The page arrived with this eclipse already written into it, for anything
-  // that does not run scripts. Now that one is, it would be saying it twice.
-  document.querySelector('.prerender')?.remove();
 
   const note = noteFor(e);
   $('facts').innerHTML =
@@ -1514,21 +1505,7 @@ function defaultId() {
   return (state.all.find((e) => e.date >= today) || state.all.at(-1)).id;
 }
 
-/**
- * Which eclipse the address is asking for. Each has a page of its own so that
- * there is something for a search engine to find, and arriving on one is a page
- * load like any other -- but from then on the path is rewritten in place, so
- * stepping between eclipses stays the instant swap it always was.
- *
- * The old ?e= form is still read, so links made before the pages existed still
- * land in the right place.
- */
 function idFromUrl() {
-  const onPath = location.pathname.match(/^\/eclipse\/(\d{4}-\d{2}-\d{2})\/?$/);
-  if (onPath) {
-    const dated = state.all.find((e) => e.date === onPath[1]);
-    if (dated) return dated.id;
-  }
   const want = new URLSearchParams(location.search).get('e');
   return state.all.some((e) => e.id === want) ? want : null;
 }
@@ -1539,7 +1516,7 @@ async function boot() {
   let index;
   try {
     // revalidate the index every time: it is what tells us the current build
-    index = await fetch('/data/index.json', { cache: 'no-cache' }).then((r) => {
+    index = await fetch('data/index.json', { cache: 'no-cache' }).then((r) => {
       if (!r.ok) throw new Error(r.status);
       return r.json();
     });

@@ -29,16 +29,6 @@ COPY data-pipeline data-pipeline
 
 RUN python data-pipeline/build.py && test -s public/data/index.json
 
-# ---------------------------------------------------------------- pages
-# A page per eclipse is built from the finished index and the site's own markup,
-# so this stage does depend on public/index.html. It is kept apart from the one
-# above for exactly that reason: editing the markup rebuilds a tenth of a second
-# of pages rather than eleven minutes of eclipse geometry.
-FROM pipeline AS pages
-
-COPY public/index.html public/index.html
-RUN python data-pipeline/pages.py && test -s public/sitemap.xml
-
 # ---------------------------------------------------------------- site
 FROM nginx:1.27-alpine
 
@@ -53,9 +43,6 @@ COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 # these cannot smuggle in a stale local copy.
 COPY public /usr/share/nginx/html
 COPY --from=pipeline /src/public/data /usr/share/nginx/html/data
-COPY --from=pipeline /src/public/preview /usr/share/nginx/html/preview
-COPY --from=pages /src/public/eclipse /usr/share/nginx/html/eclipse
-COPY --from=pages /src/public/sitemap.xml /usr/share/nginx/html/sitemap.xml
 
 EXPOSE 80
 

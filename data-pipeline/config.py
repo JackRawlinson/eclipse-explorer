@@ -43,8 +43,3 @@ SOURCE = ('Besselian elements from "Five Millennium Canon of Solar Eclipses: '
 # Delta T is taken from the canon.  Override individual eclipses here (seconds)
 # to match a different source; see README for what this changes.
 DELTA_T_OVERRIDES = {}
-
-# Where the site is served from. Only used to write absolute URLs into the
-# per-eclipse pages and the sitemap, which is the one place a relative one will
-# not do -- canonical links, and the previews social scrapers fetch.
-BASE_URL = os.environ.get("ECLIPSE_BASE_URL", "https://eclipse.tsbf.uk").rstrip("/")

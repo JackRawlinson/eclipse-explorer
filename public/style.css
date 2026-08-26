@@ -691,38 +691,3 @@ html, body {
   margin: -1px; padding: 0; border: 0;
   clip-path: inset(50%); overflow: hidden; white-space: nowrap;
 }
-
-/* ------------------------------------------------- pre-rendered eclipse page */
-
-/* Each eclipse has a page carrying its facts as text, so there is something to
-   index and something to read without scripts. Once the script renders the same
-   thing itself, this is removed rather than hidden. */
-.prerender { margin: 0 0 .1rem; }
-.prerender p { margin: 0; font-size: .8rem; line-height: 1.45; color: var(--ink-dim); }
-
-/* The list of every eclipse: a plain document, no map, whose only job is to
-   give a crawler a route to all of them and a reader an index. */
-body.listing {
-  display: block; overflow: auto;
-  background: var(--bg); color: var(--ink);
-  font: 400 1rem/1.5 var(--font, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif);
-  padding: 2rem 1.25rem 4rem;
-}
-body.listing main { max-width: 44rem; margin: 0 auto; }
-body.listing h1 { font-size: 1.3rem; margin: 0 0 .5rem; }
-body.listing h2 {
-  font-size: .95rem; margin: 1.6rem 0 .4rem;
-  padding-bottom: .2rem; border-bottom: 1px solid var(--line);
-}
-body.listing p { font-size: .88rem; color: var(--ink-dim); }
-body.listing ul { list-style: none; margin: 0; padding: 0; display: grid; gap: .15rem; }
-body.listing li a { font-size: .85rem; color: var(--ink); text-decoration: none; }
-body.listing li a:hover { color: var(--accent); text-decoration: underline; }
-/* A year's eclipses: the answer to "2027 eclipse", which otherwise has several. */
-body.listing ul.year { gap: .5rem; margin-top: .6rem; }
-body.listing ul.year li { display: flex; flex-wrap: wrap; gap: .1rem .5rem; align-items: baseline; }
-body.listing .year__note { font-size: .78rem; color: var(--ink-dim); }
-/* On a year page the entries are the point, so they look like links. */
-body.listing ul.year li a { text-decoration: underline; text-underline-offset: 2px;
-  text-decoration-color: var(--line); font-size: .9rem; }
-body.listing ul.year li a:hover { text-decoration-color: currentColor; }
