@@ -1,0 +1,35 @@
+# Cloudflare Pages reads this; nginx and the dev server ignore it. It replaces
+# the caching and MIME rules that docker/nginx.conf applies in the container.
+#
+# Rules are listed weakest first. If Pages lets a later rule win, the specific
+# ones below take effect; if an earlier one wins instead, everything simply
+# falls back to no-cache, which is correct but does less caching. Either way
+# nothing is served staler than it should be.
+
+/*
+  Cache-Control: no-cache
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+
+# Per-eclipse geometry and shading masks. Every request for these carries a
+# ?v= build stamp from index.json, so a new build is a new URL and this can be
+# cached hard without ever going stale.
+/data/*
+  Cache-Control: public, max-age=2592000
+
+# The index is what the build stamp itself comes from, so it must not be.
+/data/index.json
+  Cache-Control: no-cache
+
+# Browsers refuse an ES module served as anything but a JavaScript type, and
+# refuse it harder with nosniff set above. Named one by one rather than by
+# wildcard: vendor/ also holds a stylesheet and a licence, and a pattern that
+# caught those would break them.
+/vendor/maplibre-gl.mjs
+  Content-Type: text/javascript; charset=utf-8
+
+/vendor/maplibre-gl-shared.mjs
+  Content-Type: text/javascript; charset=utf-8
+
+/vendor/maplibre-gl-worker.mjs
+  Content-Type: text/javascript; charset=utf-8
