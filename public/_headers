@@ -1,30 +1,51 @@
 # Cloudflare Pages reads this; nginx and the dev server ignore it. It replaces
 # the caching and MIME rules that docker/nginx.conf applies in the container.
 #
-# Rules are listed weakest first. If Pages lets a later rule win, the specific
-# ones below take effect; if an earlier one wins instead, everything simply
-# falls back to no-cache, which is correct but does less caching. Either way
-# nothing is served staler than it should be.
+# Pages MERGES the headers from every rule that matches, rather than letting the
+# most specific one win. So a Cache-Control on /* does not get overridden lower
+# down -- it is concatenated with it, and `no-cache` in that list means the
+# browser revalidates whatever else the list says. That is why /* sets no
+# Cache-Control at all here, and each group states its own.
 
 /*
-  Cache-Control: no-cache
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
 
-# Per-eclipse geometry and shading masks. Every request for these carries a
-# ?v= build stamp from index.json, so a new build is a new URL and this can be
-# cached hard without ever going stale.
+# The site itself: revalidate every time, so a deploy is picked up at once.
+/
+  Cache-Control: no-cache
+
+/index.html
+  Cache-Control: no-cache
+
+/app.js
+  Cache-Control: no-cache
+
+/circumstances.js
+  Cache-Control: no-cache
+
+/style.css
+  Cache-Control: no-cache
+
+/vendor/*
+  Cache-Control: no-cache
+
+# Per-eclipse geometry and shading masks. Every request for these carries a ?v=
+# build stamp taken from index.json, so a new build is a new URL and these can
+# be cached hard without ever going stale.
 /data/*
   Cache-Control: public, max-age=2592000
 
-# The index is what the build stamp itself comes from, so it must not be.
+# The index is where that build stamp comes from, so it must not be. This does
+# merge with the rule above, leaving both max-age and no-cache -- and no-cache
+# is the one that decides: the browser revalidates before using it.
 /data/index.json
   Cache-Control: no-cache
 
 # Browsers refuse an ES module served as anything but a JavaScript type, and
 # refuse it harder with nosniff set above. Named one by one rather than by
-# wildcard: vendor/ also holds a stylesheet and a licence, and a pattern that
-# caught those would break them.
+# wildcard: vendor/ also holds a stylesheet and a licence, and a pattern wide
+# enough to catch the modules would have handed those the wrong type too.
 /vendor/maplibre-gl.mjs
   Content-Type: text/javascript; charset=utf-8
 
