@@ -1204,7 +1204,11 @@ function renderInfo(e) {
   // Short values pair up two to a row; anything carrying a time range needs the width.
   const pairs = [
     ['Type', `${titleCase(e.type)}<span class="facts__code"> ${e.typeCode}</span>`],
-    ['Saros', String(e.saros)],
+    // Nothing here explains what a saros is, on purpose: to anyone who does not
+    // already care it stays a number. Anyone who wonders whether this eclipse
+    // happens again gets the answer by pressing it.
+    ['Saros', `<button type="button" class="facts__series" data-saros="${e.saros}"
+                       title="Show the rest of this series">${e.saros}</button>`],
     ['Magnitude', e.magnitude.toFixed(3)],
   ];
   if (e.pathWidthKm) pairs.push(['Width', `${Math.round(e.pathWidthKm)} km`]);
@@ -1520,6 +1524,22 @@ async function boot() {
   $('search').addEventListener('input', (ev) => {
     state.query = ev.target.value;
     applyFilters();
+  });
+  // The facts panel is rewritten on every selection, so the saros button is
+  // caught on the way up rather than bound each time.
+  $('facts').addEventListener('click', (ev) => {
+    const button = ev.target.closest('.facts__series');
+    if (!button) return;
+    state.query = `saros ${button.dataset.saros}`;
+    $('search').value = state.query;
+    applyFilters();
+    // The list sits above the facts in the same sheet, so bring it back into
+    // view -- the filter it just applied is off the top of the scroll.
+    const panel = $('picker');
+    panel.classList.remove('is-collapsed');
+    panel.querySelector('.panel__toggle')?.setAttribute('aria-expanded', 'true');
+    $('list').scrollTop = 0;
+    $('list').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   });
   addEventListener('popstate', () => {
     const id = idFromUrl();
