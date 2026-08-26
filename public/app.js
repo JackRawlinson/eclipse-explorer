@@ -154,10 +154,14 @@ function buildMap() {
 
   window.__map = map;   // handy for debugging from the console
 
-  // NASA's acknowledgment is carried in the info panel; the map bar keeps the
-  // tile attribution it is obliged to show.
-  map.addControl(new maplibregl.AttributionControl({ compact: false }),
-                 'bottom-right');
+  // Both credits belong here rather than in a panel: a panel scrolls, and on a
+  // phone it can be shut altogether, so anything kept only in there is
+  // effectively unattributed. The wording is the acknowledgment the eclipse
+  // predictions are published under, verbatim.
+  map.addControl(new maplibregl.AttributionControl({
+    compact: false,
+    customAttribution: 'Eclipse Predictions by Fred Espenak, NASA\u2019s GSFC',
+  }), 'bottom-right');
   map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
   map.addControl(new maplibregl.ScaleControl({ maxWidth: 110 }), 'bottom-right');
   map.addControl(buttonGroup(), 'top-right');
@@ -183,6 +187,8 @@ function buildMap() {
 // Stroke icons rather than text glyphs: the glyphs rendered thin and pale, and
 // half of them were not obviously buttons at all.
 const ICONS = {
+  help: '<circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 1 1 3.2 2.4'
+      + 'c-.6.2-.9.7-.9 1.4v.5"/><path d="M12 17.2v.2"/>',
   refit: '<circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3.6M12 17.9v3.6'
        + 'M2.5 12h3.6M17.9 12h3.6"/><circle cx="12" cy="12" r="7.6"/>',
   globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/>'
@@ -200,6 +206,7 @@ function buttonGroup() {
         mapButton('refit', 'Refit the map to this eclipse', () => fitToCurrent()),
         mapButton('globe', 'Switch between the flat map and a globe', toggleGlobe, 'globe'),
         mapButton('cog', 'Display settings', toggleSettings, 'settings'),
+        mapButton('help', 'What this is, and what you can do with it', showIntro),
       );
       return div;
     },
@@ -913,7 +920,7 @@ function circumstancesHTML(s, lngLat) {
             <p class="pop__note">The Sun is either untouched or below the horizon
             throughout.</p>${where}
             <p class="pop__actions"><button type="button" class="pop__action"
-            data-act="pin">See every eclipse here</button></p>`;
+            data-act="pin">Show eclipses visible from here</button></p>`;
   }
 
   const el = state.elements;
@@ -951,7 +958,7 @@ function circumstancesHTML(s, lngLat) {
     + (notes.length ? `<p class="pop__note">${notes.join('; ')}.</p>` : '')
     + where
     + '<p class="pop__actions"><button type="button" class="pop__action" '
-    + 'data-act="pin">See every eclipse here</button></p>';
+    + 'data-act="pin">Show eclipses visible from here</button></p>';
 }
 
 const LOCAL_ZONE = (() => {
@@ -1216,7 +1223,12 @@ function renderInfo(e) {
   if (e.pathWidthKm) pairs.push(['Width', `${Math.round(e.pathWidthKm)} km`]);
 
   const wide = [];
-  if (e.centralDurationS) wide.push(['Longest', formatDuration(e.centralDurationS)]);
+  if (e.centralDurationS) {
+    // A hybrid is both along its length, so it does not get a noun.
+    const longest = e.type === 'total' ? 'Longest totality'
+      : e.type === 'annular' ? 'Longest annularity' : 'Longest';
+    wide.push([longest, formatDuration(e.centralDurationS)]);
+  }
   wide.push(['Greatest', `${at(e.greatest.ut, { seconds: true })} ${timeLabel()}`]);
   if (e.pathBegins) wide.push(['Path', span(e.pathBegins, e.pathEnds)]);
   if (e.partialBegins) wide.push(['Partial', span(e.partialBegins, e.partialEnds)]);
@@ -1252,7 +1264,7 @@ function renderInfo(e) {
   for (const li of $('legend').children) li.hidden = !show[li.dataset.key];
   const marks = $('legend').querySelector('[data-key="marks"]');
   if (marks) {
-    marks.lastChild.textContent = `Shadow centre, 30 min ${timeLabel()}`;
+    marks.lastChild.textContent = 'Shadow centre, every 30 min';
   }
 }
 
@@ -1434,6 +1446,30 @@ function buildChips() {
   }
 }
 
+const INTRO_KEY = 'eclipse-mapper.intro';
+
+/** The tour, shown once and thereafter only when the ? is pressed. */
+function showIntro() {
+  const dialog = $('intro');
+  if (!dialog?.showModal) return;          // no <dialog> support: silently skip
+  if (!dialog.open) dialog.showModal();
+  try { localStorage.setItem(INTRO_KEY, '1'); } catch { /* private mode */ }
+}
+
+function wireIntro() {
+  const dialog = $('intro');
+  if (!dialog) return;
+  // Any click at all dismisses it, inside or out. It is a greeting, not a form,
+  // and it should never be something you have to aim at to get rid of.
+  dialog.addEventListener('click', () => dialog.close());
+}
+
+function maybeShowIntro() {
+  let seen = '1';
+  try { seen = localStorage.getItem(INTRO_KEY); } catch { /* blocked: treat as seen */ }
+  if (!seen) showIntro();
+}
+
 function wirePanels() {
   const narrow = () => window.innerWidth < 736 || window.innerHeight < 544;
   for (const btn of document.querySelectorAll('.panel__toggle')) {
@@ -1507,6 +1543,8 @@ async function boot() {
   wirePanels();
   wireKeys();
   renderList();
+  wireIntro();
+  maybeShowIntro();
 
   $('prev').addEventListener('click', () => step(-1));
   $('next').addEventListener('click', () => step(1));

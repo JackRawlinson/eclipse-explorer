@@ -60,22 +60,14 @@
         <li data-key="annular"><i class="sw sw--annular"></i>Path of annularity</li>
         <li data-key="central"><i class="sw sw--central"></i>Central line</li>
         <li data-key="penumbra"><i class="sw sw--penumbra"></i>Partial eclipse visible</li>
-        <li data-key="band"><i class="sw sw--band"></i>% of the Sun covered</li>
+        <li data-key="band"><i class="sw sw--band"></i>Most of the Sun covered</li>
         <li data-key="greatest"><i class="sw sw--greatest"></i>Greatest eclipse</li>
         <li data-key="marks"><i class="sw sw--marks"></i>Shadow centre, 30 min UT</li>
       </ul>
 
-      <p class="hint">Click anywhere on the map to see the local times there, and how
-        much of the Sun is covered.</p>
+      <p class="hint">Click anywhere on the map to see when the eclipse happens
+        there, and how much of the Sun is covered.</p>
 
-      <p class="credit">
-        Settings stay in this browser; nothing about you is sent anywhere. Map tiles
-        are fetched from OpenFreeMap as you pan.
-        <br><br>
-        Eclipse Predictions by Fred Espenak, NASA’s GSFC.
-        Paths computed from the Besselian elements of the
-        <a href="https://eclipse.gsfc.nasa.gov/SEpubs/5MCSE.html" rel="noopener">Five Millennium Canon of Solar Eclipses</a>.
-      </p>
     </div>
   </div>
 </section>
@@ -94,6 +86,31 @@
          aria-label="Move the shadow through the eclipse">
   <output class="timeline__time" id="tl-time">—</output>
 </div>
+
+<dialog class="intro" id="intro">
+  <h2>Solar eclipses, 1900&ndash;2100</h2>
+  <p class="intro__lead">Every solar eclipse for two centuries, each one drawn on
+    the map with the ground it passes over.</p>
+  <ul class="intro__list">
+    <li><b>Pick an eclipse</b> from the list, or step through them with the arrows
+      &mdash; the <kbd>&larr;</kbd> and <kbd>&rarr;</kbd> keys work too.</li>
+    <li><b>Click the map</b> anywhere to see when the eclipse happens there, how much
+      of the Sun is covered, and how long totality lasts.</li>
+    <li><b>Choose a place</b> and the list narrows to the eclipses you could see from
+      it &mdash; all of them, or only the ones that go total.</li>
+    <li><b>Press play</b> to watch the shadow and the day/night line cross the Earth.</li>
+    <li><b>The cog</b> changes the basemap, the colours, and whether times are shown
+      in UT or on your own clock.</li>
+  </ul>
+  <p class="intro__note">Settings stay in this browser; nothing about you is sent
+    anywhere. Map tiles are fetched from OpenFreeMap as you pan.</p>
+  <p class="intro__credit">Eclipse Predictions by Fred Espenak, NASA&rsquo;s GSFC,
+    from the Besselian elements of the
+    <a href="https://eclipse.gsfc.nasa.gov/SEpubs/5MCSE.html" rel="noopener">Five
+    Millennium Canon of Solar Eclipses</a>. Map data &copy; OpenStreetMap
+    contributors.</p>
+  <form method="dialog"><button class="intro__go" value="close" autofocus>Start</button></form>
+</dialog>
 
 <section class="settings" id="settings" hidden>
   <header class="settings__head">

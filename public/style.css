@@ -286,8 +286,6 @@ html, body {
 .sw--greatest { height: .7rem; width: .7rem; border-radius: 50%; border: 2.5px solid var(--greatest); margin: 0 .2rem; }
 .sw--marks    { height: .45rem; width: .45rem; border-radius: 50%; background: var(--ink); margin: 0 .32rem; }
 
-.credit { margin: 0; font-size: .68rem; line-height: 1.35; color: var(--ink-dim); }
-.credit a { color: inherit; }
 
 /* --------------------------------------------------------------- controls */
 
@@ -579,7 +577,10 @@ html, body {
   left: calc(var(--panel-w) + 2.25rem);
   right: 1.5rem;
   margin-inline: auto;
-  bottom: 1.6rem;
+  /* Clear of the attribution, which is two lines wherever the map is narrow
+     enough to wrap it. It has to stay legible: it is the condition the map
+     data comes under. */
+  bottom: 3rem;
   display: flex;
   align-items: center;
   gap: .6rem;
@@ -618,13 +619,13 @@ html, body {
 @media (max-width: 46rem), (max-height: 34rem) {
   .timeline {
     left: .5rem; right: .5rem; transform: none;
-    width: auto; bottom: .5rem;
+    width: auto;
   }
   /* The timeline floats over the map, and on a phone the open sheet reaches
      the bottom of the screen, so the two were sitting on top of each other.
      The sheet stops above it instead -- but only when there is one, since a
      partial eclipse has no shadow to play. */
-  body.has-timeline .rail { bottom: 3.9rem; }
+  body.has-timeline .rail { bottom: 6.2rem; }
 }
 
 /* A phone on its side has barely any height to divide. The list keeping its
@@ -636,4 +637,50 @@ html, body {
   .picker { flex: 1 1 auto; min-height: 0; }
   .details { flex: 0 1 auto; min-height: 3.5rem; max-height: 8rem; }
   .list { min-height: 3rem; max-height: none; }
+}
+
+/* The rail runs down the left; the attribution sits bottom-right. On a narrow
+   desktop the attribution text is long enough to reach back under the rail and
+   be covered by it. Holding it inside the column beside the rail costs nothing,
+   where raising the rail off the bottom would cost panel height at every size.
+   Only above the breakpoint: below it the rail is a bottom sheet spanning the
+   full width, and there is no column to hold it in. */
+@media (min-width: 46.0625rem) {
+  .maplibregl-ctrl-bottom-right { max-width: calc(100vw - var(--panel-w) - 2.5rem); }
+}
+
+/* ------------------------------------------------------------------- intro */
+
+.intro {
+  max-width: 30rem;
+  margin: auto;
+  padding: 1.1rem 1.25rem 1rem;
+  border: 0; border-radius: var(--radius);
+  background: var(--bg); color: var(--ink);
+  box-shadow: var(--shadow);
+}
+.intro::backdrop { background: rgba(8, 15, 30, .45); }
+.intro h2 { margin: 0 0 .4rem; font-size: 1.05rem; letter-spacing: -.01em; }
+.intro__lead { margin: 0 0 .7rem; font-size: .82rem; color: var(--ink-dim); line-height: 1.45; }
+.intro__list { margin: 0 0 .8rem; padding-left: 1.1rem; display: grid; gap: .45rem; }
+.intro__list li { font-size: .82rem; line-height: 1.45; }
+.intro__list b { font-weight: 600; }
+.intro kbd {
+  font: inherit; font-size: .78em; padding: 0 .28em;
+  border: 1px solid var(--line); border-radius: 4px; background: var(--bg-sunk);
+}
+.intro__note { margin: 0 0 .45rem; font-size: .72rem; color: var(--ink-dim); line-height: 1.4; }
+.intro__credit { margin: 0 0 .9rem; font-size: .72rem; color: var(--ink-dim); line-height: 1.4; }
+.intro__credit a { color: inherit; }
+.intro__go {
+  width: 100%;
+  border: 0; border-radius: 8px;
+  background: var(--accent); color: #fff;
+  font: inherit; font-size: .85rem; font-weight: 600;
+  padding: .5rem; cursor: pointer;
+}
+.intro__go:hover { filter: brightness(1.08); }
+
+@media (max-height: 34rem) {
+  .intro { max-height: 88vh; overflow-y: auto; }
 }
