@@ -17,7 +17,7 @@
 
 set -euo pipefail
 
-NAME="${CF_PAGES_PROJECT:-eclipse-explorer}"
+NAME="${CF_PAGES_PROJECT:-eclipse}"
 BRANCH="${CF_PAGES_BRANCH:-main}"
 WRANGLER=(npx --yes wrangler@latest)
 
@@ -38,7 +38,10 @@ fi
 
 # Creating it up front keeps the deploy non-interactive; without a project to
 # deploy into, wrangler stops and asks for a name.
-if ! "${WRANGLER[@]}" pages project list 2>/dev/null | grep -q "\b$NAME\b"; then
+# Match the Project Name column only. Matching anywhere in the table finds the
+# name inside the Project Domains column too, so a project that had been renamed
+# still looked present and the deploy failed further down instead of recreating.
+if ! "${WRANGLER[@]}" pages project list 2>/dev/null | grep -qE "^..? *$NAME +."; then
   echo "Creating Pages project $NAME"
   "${WRANGLER[@]}" pages project create "$NAME" --production-branch "$BRANCH"
 fi

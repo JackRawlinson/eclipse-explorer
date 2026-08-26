@@ -6,11 +6,30 @@
 <title>Eclipse Mapper — solar eclipse paths 1900–2100</title>
 <meta name="description" content="Every solar eclipse from 1900 to 2100 on an interactive map. Paths of totality and annularity computed from NASA's Besselian elements. No ads, no tracking.">
 <meta name="color-scheme" content="light dark">
+<link rel="canonical" href="https://eclipse.tsbf.uk/">
+
+<!-- Link previews. Absolute URLs, because most scrapers will not resolve a
+     relative one -- so these only come right once eclipse.tsbf.uk points here. -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Eclipse Mapper">
+<meta property="og:url" content="https://eclipse.tsbf.uk/">
+<meta property="og:title" content="Eclipse Mapper — solar eclipse paths 1900–2100">
+<meta property="og:description" content="Every solar eclipse from 1900 to 2100 on an interactive map. Paths of totality and annularity computed from NASA's Besselian elements. No ads, no tracking.">
+<meta property="og:image" content="https://eclipse.tsbf.uk/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="The path of the 2 August 2027 total eclipse, crossing the Atlantic, north Africa and the Middle East.">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
 <link rel="stylesheet" href="style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='11' fill='%23fbbf24'/><circle cx='11' cy='14' r='11' fill='%230f172a'/></svg>">
 </head>
 <body>
+
+<!-- The page is a map, so its heading has nowhere to sit visually. It still
+     needs one: it is the only thing telling a reader or a crawler what this is
+     before any of the interface makes sense. -->
+<h1 class="sr-only">Solar eclipse paths, 1900 to 2100</h1>
 
 <div id="map" role="application" aria-label="Map of solar eclipse paths"></div>
 
@@ -62,7 +81,7 @@
         <li data-key="penumbra"><i class="sw sw--penumbra"></i>Partial eclipse visible</li>
         <li data-key="band"><i class="sw sw--band"></i>Most of the Sun covered</li>
         <li data-key="greatest"><i class="sw sw--greatest"></i>Greatest eclipse</li>
-        <li data-key="marks"><i class="sw sw--marks"></i>Shadow centre, 30 min UT</li>
+        <li data-key="marks"><i class="sw sw--marks"></i>Shadow centre, every 30 min</li>
       </ul>
 
       <p class="hint">Click anywhere on the map to see when the eclipse happens
