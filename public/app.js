@@ -4,7 +4,6 @@
 import * as maplibregl from './vendor/maplibre-gl.mjs';
 import { localCircumstances, toUT } from './circumstances.js';
 
-const NASA_ACK = "Eclipse Predictions by Fred Espenak, NASA's GSFC";
 // OpenFreeMap's styles, quietest first. `dark` here means the paint palette and
 // the panels flip, not that the basemap is literally black.
 const BASEMAPS = [
@@ -15,25 +14,8 @@ const BASEMAPS = [
   { id: 'dark', label: 'Dark', dark: true },
 ];
 const styleUrl = (id) => `https://tiles.openfreemap.org/styles/${id}`;
-const DEFAULT_BASEMAP = 'liberty';
 
-// Painted onto the mask in the browser. A near-neutral slate: the shading has to
-// sit under any basemap, and a coloured wash over a coloured sea reads as nothing.
-const SHADING_DEFAULTS = { tint: '334155', shade: 0.3, gamma: 0.85 };
-
-function readShadingOptions() {
-  const q = new URLSearchParams(location.search);
-  const num = (k) => (q.has(k) && Number.isFinite(Number(q.get(k)))
-    ? Number(q.get(k)) : SHADING_DEFAULTS[k]);
-  const hex = (q.get('tint') || SHADING_DEFAULTS.tint).replace('#', '');
-  return {
-    rgb: [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16) || 0),
-    shade: Math.min(1, Math.max(0, num('shade'))),
-    gamma: Math.max(0.1, num('gamma')),
-    key: `${hex}-${num('shade')}-${num('gamma')}`,
-  };
-}
-
+// Overlay colours, one set per theme. The basemap decides which is in force.
 const PAINT = {
   light: {
     total: '#4c1d95', annular: '#c2410c', penumbra: '#475569',
@@ -49,6 +31,59 @@ const PAINT = {
   },
 };
 
+// Everything about how the map is painted, in one place. Defaults chosen to keep
+// the basemap legible: the shading is a backdrop, the contours carry the numbers.
+const DEFAULTS = {
+  basemap: 'liberty',
+  mode: 'gradient',        // gradient | bands | off
+  tint: '#334155',         // near-neutral: a coloured wash over a coloured sea reads as nothing
+  shade: 0.3,
+  gamma: 0.85,
+  total: '#4c1d95',
+  annular: '#c2410c',
+};
+const SETTINGS_KEY = 'eclipse-mapper.display';
+
+const SWATCHES = {
+  tint: [['#334155', 'Slate'], ['#1d4ed8', 'Blue'], ['#5b21b6', 'Violet'],
+         ['#7c2d12', 'Umber'], ['#0f766e', 'Teal']],
+  total: [['#4c1d95', 'Violet'], ['#1e3a8a', 'Navy'], ['#9d174d', 'Magenta'],
+          ['#065f46', 'Green'], ['#0f172a', 'Ink']],
+  annular: [['#c2410c', 'Orange'], ['#b45309', 'Amber'], ['#be123c', 'Rose'],
+            ['#a16207', 'Ochre'], ['#7c2d12', 'Umber']],
+};
+
+function loadSettings() {
+  let stored = {};
+  try {
+    stored = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
+  } catch { /* a corrupt or blocked store just means defaults */ }
+
+  // URL wins over the stored preference, so a link can carry a specific look.
+  const q = new URLSearchParams(location.search);
+  const fromUrl = {};
+  if (q.has('basemap')) fromUrl.basemap = q.get('basemap');
+  if (q.has('tint')) fromUrl.tint = `#${q.get('tint').replace('#', '')}`;
+  for (const k of ['shade', 'gamma']) {
+    if (q.has(k) && Number.isFinite(Number(q.get(k)))) fromUrl[k] = Number(q.get(k));
+  }
+  return { ...DEFAULTS, ...stored, ...fromUrl };
+}
+
+function saveSettings() {
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
+  } catch { /* private mode; the session still works, it just will not persist */ }
+}
+
+const basemapIndex = () =>
+  Math.max(0, BASEMAPS.findIndex((b) => b.id === state.settings.basemap));
+
+const maskKey = () => {
+  const { tint, shade, gamma } = state.settings;
+  return `${tint}-${shade}-${gamma}`;
+};
+
 const TYPES = [
   { key: 'total', label: 'Total' },
   { key: 'annular', label: 'Annular' },
@@ -57,8 +92,12 @@ const TYPES = [
 ];
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
-const BLANK_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ'
-  + 'AAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+// A transparent placeholder for the image source before a mask is painted.
+// Built at runtime rather than inlined: a one-pixel image stretched across the
+// whole world is something MapLibre declines to decode.
+// No placeholder image: the source is created when there is a real mask to put
+// in it. Handing MapLibre a stand-in only to replace it a moment later left it
+// reporting a decode failure on the request it had already abandoned.
 const MERCATOR_LIMIT = 85.051129;
 const WORLD_CORNERS = [[-180, MERCATOR_LIMIT], [180, MERCATOR_LIMIT],
                        [180, -MERCATOR_LIMIT], [-180, -MERCATOR_LIMIT]];
@@ -70,25 +109,17 @@ const state = {
   current: null,
   query: '',
   types: new Set(),
-  basemap: (() => {
-    const want = new URLSearchParams(location.search).get('basemap') || DEFAULT_BASEMAP;
-    const found = BASEMAPS.findIndex((b) => b.id === want);
-    return found >= 0 ? found : 0;
-  })(),
+  settings: loadSettings(),
   theme: 'light',
-  // How the obscuration mask is painted. The mask itself carries no colour, so
-  // all three are live: ?tint=334155&shade=0.3&gamma=0.85 tries alternatives
-  // without regenerating a single image.
-  shading: readShadingOptions(),
   elements: null,       // Besselian elements of the selected eclipse
   version: '',          // build stamp, appended to data URLs to defeat caching
-  gradient: true,       // smooth shading, versus stepped contour bands
   globe: false,
 };
 
 const geoCache = new Map();
 const maskCache = new Map();   // painted masks, keyed by source and appearance
 let shadingUrl = null;
+let layersReady = false;   // our layers exist and can be added to
 let loadToken = 0;
 let map;
 let popup = null;
@@ -98,7 +129,7 @@ let popup = null;
 function buildMap() {
   map = new maplibregl.Map({
     container: 'map',
-    style: styleUrl(BASEMAPS[state.basemap].id),
+    style: styleUrl(BASEMAPS[basemapIndex()].id),
     center: [0, 20],
     zoom: 1.3,
     minZoom: 0.6,
@@ -109,13 +140,17 @@ function buildMap() {
 
   window.__map = map;   // handy for debugging from the console
 
-  map.addControl(new maplibregl.AttributionControl({
-    compact: false,
-    customAttribution: NASA_ACK,
-  }), 'bottom-right');
+  // NASA's acknowledgment is carried in the info panel; the map bar keeps the
+  // tile attribution it is obliged to show.
+  map.addControl(new maplibregl.AttributionControl({ compact: false }),
+                 'bottom-right');
   map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
   map.addControl(new maplibregl.ScaleControl({ maxWidth: 110 }), 'bottom-right');
   map.addControl(buttonGroup(), 'top-right');
+
+  // MapLibre routes style and layer failures here rather than throwing, so
+  // without this a bad layer definition just silently draws nothing.
+  map.on('error', (ev) => console.error('map error:', ev?.error?.message || ev));
 
   map.on('click', (ev) => showCircumstances(ev.lngLat));
   map.on('mouseout', () => { map.getCanvas().style.cursor = ''; });
@@ -123,6 +158,7 @@ function buildMap() {
 
   map.on('style.load', () => {
     addEclipseLayers();
+    applyPathColours();
     if (state.current) {
       setMapData(geoCache.get(state.current.id) || EMPTY);
       setShading(state.current);
@@ -130,16 +166,26 @@ function buildMap() {
   });
 }
 
+// Stroke icons rather than text glyphs: the glyphs rendered thin and pale, and
+// half of them were not obviously buttons at all.
+const ICONS = {
+  refit: '<circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3.6M12 17.9v3.6'
+       + 'M2.5 12h3.6M17.9 12h3.6"/><circle cx="12" cy="12" r="7.6"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/>'
+       + '<path d="M12 3c2.6 2.5 4 5.6 4 9s-1.4 6.5-4 9c-2.6-2.5-4-5.6-4-9s1.4-6.5 4-9z"/>',
+  flat: '<rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="M3 10h18M9 5v14"/>',
+  cog: '<circle cx="12" cy="12" r="3.1"/><path d="M19.4 14.5a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5v.2a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H2.8a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h.1A1.7 1.7 0 0 0 10 3.7v-.2a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.5 1h.2a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+};
+
 function buttonGroup() {
   return {
     onAdd() {
       const div = document.createElement('div');
       div.className = 'maplibregl-ctrl maplibregl-ctrl-group';
       div.append(
-        mapButton('⌖', 'Reset view to this eclipse', () => fitToCurrent()),
-        mapButton('◐', 'Change the basemap', cycleBasemap),
-        mapButton('◍', 'Switch between flat and globe', toggleGlobe),
-        mapButton('▦', 'Switch between smooth shading and stepped bands', toggleGradient),
+        mapButton('refit', 'Refit the map to this eclipse', () => fitToCurrent()),
+        mapButton('globe', 'Switch between the flat map and a globe', toggleGlobe, 'globe'),
+        mapButton('cog', 'Display settings', toggleSettings, 'settings'),
       );
       return div;
     },
@@ -147,42 +193,40 @@ function buttonGroup() {
   };
 }
 
-function mapButton(glyph, title, onClick) {
+function mapButton(icon, title, onClick, role) {
   const b = document.createElement('button');
-  if (title.startsWith('Change the basemap')) b.dataset.role = 'basemap';
   b.type = 'button';
   b.className = 'map-btn';
   b.title = title;
   b.setAttribute('aria-label', title);
-  b.textContent = glyph;
+  if (role) b.dataset.role = role;
+  b.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"
+    aria-hidden="true">${ICONS[icon]}</svg>`;
   b.addEventListener('click', onClick);
   return b;
 }
 
+function setButtonIcon(role, icon) {
+  const b = document.querySelector(`.map-btn[data-role="${role}"]`);
+  if (b) b.querySelector('svg').innerHTML = ICONS[icon];
+}
+
 function addEclipseLayers() {
+  layersReady = false;
   const c = PAINT[state.theme];
   if (!map.getSource('eclipse')) {
     map.addSource('eclipse', { type: 'geojson', data: EMPTY });
   }
 
-  if (!map.getSource('shading')) {
-    map.addSource('shading', { type: 'image', url: BLANK_PNG,
-                               coordinates: WORLD_CORNERS });
-  }
-
   const is = (kind) => ['==', ['get', 'kind'], kind];
-  const byFlavour = ['match', ['get', 'flavour'], 'annular', c.annular, c.total];
-
-  if (map.getLayer('shading')) map.removeLayer('shading');
-  map.addLayer({ id: 'shading', type: 'raster', source: 'shading',
-                 paint: { 'raster-opacity': state.gradient ? 1 : 0,
-                          'raster-fade-duration': 0,
-                          'raster-resampling': 'linear' } });
+  const byFlavour = ['match', ['get', 'flavour'], 'annular',
+                     state.settings.annular, state.settings.total];
 
   add({ id: 'band-fill', type: 'fill', filter: is('band'),
         paint: { 'fill-color': ['interpolate', ['linear'], ['get', 'level'],
                                 0.2, c.bandLow, 0.9, c.bandHigh],
-                 'fill-opacity': state.gradient ? 0 : 0.09 } });
+                 'fill-opacity': state.settings.mode === 'bands' ? 0.09 : 0 } });
   add({ id: 'band-line', type: 'line', filter: is('band'),
         paint: { 'line-color': c.bandLine, 'line-opacity': 0.55, 'line-width': 0.9 } });
   add({ id: 'band-label', type: 'symbol', filter: is('band'), minzoom: 1.5,
@@ -195,7 +239,7 @@ function addEclipseLayers() {
 
   add({ id: 'penumbra-fill', type: 'fill', filter: is('penumbra'),
         paint: { 'fill-color': c.penumbra,
-                 'fill-opacity': state.gradient ? 0 : 0.10 } });
+                 'fill-opacity': state.settings.mode === 'bands' ? 0.10 : 0 } });
   add({ id: 'penumbra-line', type: 'line', filter: is('penumbra'),
         paint: { 'line-color': c.penumbra, 'line-opacity': 0.55,
                  'line-width': 1, 'line-dasharray': [3, 2] } });
@@ -231,6 +275,8 @@ function addEclipseLayers() {
         paint: { 'circle-radius': 5, 'circle-opacity': 0,
                  'circle-stroke-color': c.greatest, 'circle-stroke-width': 2.5 } });
 
+  layersReady = true;
+
   function add(layer) {
     if (map.getLayer(layer.id)) map.removeLayer(layer.id);
     map.addLayer({ source: 'eclipse', ...layer });
@@ -243,22 +289,40 @@ function setMapData(fc) {
 }
 
 async function setShading(entry) {
-  if (!map.getSource('shading')) return;
-  if (!entry.shading) { applyShadingImage(BLANK_PNG); return; }
+  if (!layersReady) return;   // style.load calls us again once the layers exist
+  if (!entry.shading) { applyShadingImage(null); return; }
   try {
     const painted = await paintMask(dataUrl(`${entry.id}.png`));
     if (state.current?.id === entry.id) applyShadingImage(painted);
   } catch (err) {
-    applyShadingImage(BLANK_PNG);          // the contours still carry the numbers
+    applyShadingImage(null);               // the contours still carry the numbers
     console.warn('could not paint the shading mask', err);
   }
 }
 
 function applyShadingImage(url) {
-  const src = map.getSource('shading');
-  if (src) src.updateImage({ url, coordinates: WORLD_CORNERS });
-  if (shadingUrl && shadingUrl !== url) URL.revokeObjectURL(shadingUrl);
-  shadingUrl = url.startsWith('blob:') ? url : null;
+  if (!url) {                                  // nothing to show for this eclipse
+    if (map.getLayer('shading')) map.setLayoutProperty('shading', 'visibility', 'none');
+    return;
+  }
+  const existing = map.getSource('shading');
+  if (existing) {
+    existing.updateImage({ url, coordinates: WORLD_CORNERS });
+  } else {
+    map.addSource('shading', { type: 'image', url, coordinates: WORLD_CORNERS });
+  }
+  if (!map.getLayer('shading')) {
+    // beneath everything we draw, above the basemap
+    const below = ['band-fill', 'penumbra-fill', 'path-fill']
+      .find((id) => map.getLayer(id));
+    map.addLayer({
+      id: 'shading', type: 'raster', source: 'shading',
+      paint: { 'raster-opacity': state.settings.mode === 'gradient' ? 1 : 0,
+               'raster-fade-duration': 0, 'raster-resampling': 'linear' },
+    }, below);
+  }
+  map.setLayoutProperty('shading', 'visibility', 'visible');
+  shadingUrl = url;   // the cache owns these; revoking here would kill a live entry
 }
 
 /**
@@ -267,7 +331,10 @@ function applyShadingImage(url) {
  * changing how the shading looks costs a repaint rather than a rebuild.
  */
 async function paintMask(url) {
-  const { rgb, shade, gamma, key } = state.shading;
+  const { tint, shade, gamma } = state.settings;
+  const key = maskKey();
+  const hex = tint.replace('#', '');
+  const rgb = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16) || 0);
   const cached = maskCache.get(url + key);
   if (cached) return cached;
 
@@ -296,40 +363,59 @@ async function paintMask(url) {
   const blobUrl = await new Promise((resolve) => {
     canvas.toBlob((blob) => resolve(URL.createObjectURL(blob)), 'image/png');
   });
+  // Evict the oldest, but never the one currently on the map: revoking a blob
+  // URL still in use leaves MapLibre unable to decode it.
   if (maskCache.size > 12) {
-    const oldest = maskCache.keys().next().value;
-    URL.revokeObjectURL(maskCache.get(oldest));
-    maskCache.delete(oldest);
+    for (const [k, v] of maskCache) {
+      if (v === shadingUrl) continue;
+      URL.revokeObjectURL(v);
+      maskCache.delete(k);
+      break;
+    }
   }
   maskCache.set(url + key, blobUrl);
   return blobUrl;
 }
 
-function cycleBasemap() {
-  state.basemap = (state.basemap + 1) % BASEMAPS.length;
-  const chosen = BASEMAPS[state.basemap];
+function applyBasemap({ restyle = true } = {}) {
+  const chosen = BASEMAPS[basemapIndex()];
   state.theme = chosen.dark ? 'dark' : 'light';
   document.documentElement.dataset.theme = state.theme;   // panels follow the map
-  map.setStyle(styleUrl(chosen.id));                      // style.load re-adds ours
-  const btn = document.querySelector('.map-btn[data-role="basemap"]');
-  if (btn) btn.title = `Basemap: ${chosen.label} — click to change`;
+  if (restyle) map.setStyle(styleUrl(chosen.id));         // style.load re-adds ours
 }
 
-function toggleGradient() {
-  state.gradient = !state.gradient;
-  if (map.getLayer('shading')) {
-    map.setPaintProperty('shading', 'raster-opacity', state.gradient ? 1 : 0);
+/** Path colours reach both the map layers and the legend swatches. */
+function applyPathColours() {
+  const { total, annular } = state.settings;
+  const root = document.documentElement.style;
+  root.setProperty('--total', total);
+  root.setProperty('--annular', annular);
+  const byFlavour = ['match', ['get', 'flavour'], 'annular', annular, total];
+  for (const layer of ['path-fill', 'path-line']) {
+    if (map.getLayer(layer)) {
+      map.setPaintProperty(layer, layer.endsWith('fill') ? 'fill-color' : 'line-color',
+                           byFlavour);
+    }
   }
-  if (map.getLayer('band-fill')) {
-    map.setPaintProperty('band-fill', 'fill-opacity', state.gradient ? 0 : 0.09);
-  }
-  if (map.getLayer('penumbra-fill')) {
-    map.setPaintProperty('penumbra-fill', 'fill-opacity', state.gradient ? 0 : 0.10);
-  }
+}
+
+/** Push the shading settings at the layers already on the map. */
+function applyShading() {
+  const mode = state.settings.mode;
+  const set = (layer, prop, value) => {
+    if (map.getLayer(layer)) map.setPaintProperty(layer, prop, value);
+  };
+  set('shading', 'raster-opacity', mode === 'gradient' ? 1 : 0);
+  set('band-fill', 'fill-opacity', mode === 'bands' ? 0.09 : 0);
+  set('penumbra-fill', 'fill-opacity', mode === 'bands' ? 0.10 : 0);
+  if (state.current) setShading(state.current);           // repaint the mask
 }
 
 function toggleGlobe() {
   state.globe = !state.globe;
+  const btn = document.querySelector('.map-btn[data-role="globe"]');
+  if (btn) btn.setAttribute('aria-pressed', String(state.globe));
+  setButtonIcon('globe', state.globe ? 'flat' : 'globe');
   if (!state.globe) {
     try { map.setProjection({ type: 'mercator' }); fitToCurrent(); } catch { /* nothing to undo */ }
     return;
@@ -654,6 +740,107 @@ function formatLatLon(lat, lon, dp = 1) {
 const signed = (v, dp) => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(dp);
 const titleCase = (s) => s[0].toUpperCase() + s.slice(1);
 
+// --------------------------------------------------------------- settings ui
+
+function toggleSettings(force) {
+  const panel = $('settings');
+  const open = typeof force === 'boolean' ? force : panel.hidden;
+  panel.hidden = !open;
+  const btn = document.querySelector('.map-btn[data-role="settings"]');
+  if (btn) btn.setAttribute('aria-pressed', String(open));
+}
+
+function buildSettings() {
+  const s = state.settings;
+
+  const chips = (host, options, current, onPick) => {
+    host.replaceChildren();
+    for (const [value, label] of options) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'chip';
+      b.textContent = label;
+      b.setAttribute('aria-pressed', String(current() === value));
+      b.addEventListener('click', () => {
+        onPick(value);
+        for (const other of host.children) {
+          other.setAttribute('aria-pressed', String(other === b));
+        }
+      });
+      host.append(b);
+    }
+  };
+
+  chips($('set-basemap'), BASEMAPS.map((b) => [b.id, b.label]),
+        () => s.basemap, (id) => { s.basemap = id; saveSettings(); applyBasemap(); });
+
+  chips($('set-mode'), [['gradient', 'Gradient'], ['bands', 'Bands'], ['off', 'None']],
+        () => s.mode, (mode) => { s.mode = mode; saveSettings(); applyShading(); shadingOnly(); });
+
+  const slider = (id, key, format) => {
+    const input = $(id);
+    const out = $(`${id}-out`);
+    input.value = s[key];
+    out.textContent = format(s[key]);
+    input.addEventListener('input', () => {
+      s[key] = Number(input.value);
+      out.textContent = format(s[key]);
+      applyShading();
+    });
+    input.addEventListener('change', saveSettings);
+  };
+  slider('set-shade', 'shade', (v) => `${Math.round(v * 100)}%`);
+  slider('set-gamma', 'gamma', (v) => v.toFixed(2));
+
+  const colourRow = (key, apply) => {
+    const input = $(`set-${key}`);
+    input.value = s[key];
+    input.addEventListener('input', () => { s[key] = input.value; apply(); });
+    input.addEventListener('change', saveSettings);
+
+    const host = $(`set-${key}-swatches`);
+    host.replaceChildren();
+    for (const [hex, name] of SWATCHES[key]) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.style.background = hex;
+      b.title = name;
+      b.setAttribute('aria-label', `${name}`);
+      b.addEventListener('click', () => {
+        s[key] = hex;
+        input.value = hex;
+        saveSettings();
+        apply();
+      });
+      host.append(b);
+    }
+  };
+  colourRow('tint', applyShading);
+  colourRow('total', applyPathColours);
+  colourRow('annular', applyPathColours);
+
+  $('settings-close').addEventListener('click', () => toggleSettings(false));
+  $('settings-reset').addEventListener('click', () => {
+    state.settings = { ...DEFAULTS };
+    saveSettings();
+    buildSettings();
+    applyBasemap();
+    applyShading();
+    applyPathColours();
+    shadingOnly();
+  });
+  shadingOnly();
+}
+
+/** The strength, contrast and colour rows mean nothing with shading turned off. */
+function shadingOnly() {
+  const on = state.settings.mode !== 'off';
+  for (const el of document.querySelectorAll('[data-shading-only]')) {
+    el.style.opacity = on ? '' : '.4';
+    for (const input of el.querySelectorAll('input, button')) input.disabled = !on;
+  }
+}
+
 // ------------------------------------------------------------------ chrome
 
 function buildChips() {
@@ -705,6 +892,7 @@ function wireKeys() {
   addEventListener('keydown', (ev) => {
     const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(ev.target.tagName);
     if (ev.key === '/' && !typing) { ev.preventDefault(); $('search').focus(); return; }
+    if (ev.key === 'Escape' && !$('settings').hidden) { toggleSettings(false); return; }
     if (typing && ev.key === 'Escape') { ev.target.blur(); return; }
     if (typing) return;
     if (ev.key === 'ArrowLeft') { ev.preventDefault(); step(-1); }
@@ -749,6 +937,7 @@ async function boot() {
   $('range').textContent = `${index.range[0]}–${index.range[1]}`;
 
   buildMap();
+  buildSettings();
   buildChips();
   wirePanels();
   wireKeys();

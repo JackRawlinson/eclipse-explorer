@@ -70,7 +70,7 @@
       <li data-key="marks"><i class="sw sw--marks"></i>Shadow centre, 30 min UT</li>
     </ul>
 
-    <p class="hint">Click anywhere on the map for local times and how much of the Sun goes.</p>
+    <p class="hint">Click anywhere on the map to see the local times there, and how much of the Sun is covered.</p>
 
     <p class="credit">
       Eclipse Predictions by Fred Espenak, NASA’s GSFC.
@@ -81,6 +81,59 @@
 </section>
 
 </div><!-- .rail -->
+
+<section class="settings" id="settings" hidden>
+  <header class="settings__head">
+    <h2>Display</h2>
+    <button type="button" class="settings__close" id="settings-close" aria-label="Close settings">×</button>
+  </header>
+
+  <div class="settings__body">
+    <fieldset class="field">
+      <legend>Basemap</legend>
+      <div class="chips chips--tight" id="set-basemap"></div>
+    </fieldset>
+
+    <fieldset class="field">
+      <legend>Shading</legend>
+      <div class="chips chips--tight" id="set-mode"></div>
+    </fieldset>
+
+    <div class="field field--row" data-shading-only>
+      <label for="set-shade">Strength</label>
+      <input type="range" id="set-shade" min="0" max="0.8" step="0.01">
+      <output id="set-shade-out"></output>
+    </div>
+
+    <div class="field field--row" data-shading-only>
+      <label for="set-gamma">Contrast</label>
+      <input type="range" id="set-gamma" min="0.4" max="1.6" step="0.05">
+      <output id="set-gamma-out"></output>
+    </div>
+
+    <div class="field field--row" data-shading-only>
+      <label for="set-tint">Colour</label>
+      <input type="color" id="set-tint">
+      <div class="swatches" id="set-tint-swatches"></div>
+    </div>
+
+    <fieldset class="field">
+      <legend>Paths</legend>
+      <div class="field--row">
+        <label for="set-total">Totality</label>
+        <input type="color" id="set-total">
+        <div class="swatches" id="set-total-swatches"></div>
+      </div>
+      <div class="field--row" style="margin-top:.4rem">
+        <label for="set-annular">Annularity</label>
+        <input type="color" id="set-annular">
+        <div class="swatches" id="set-annular-swatches"></div>
+      </div>
+    </fieldset>
+
+    <button type="button" class="settings__reset" id="settings-reset">Reset to defaults</button>
+  </div>
+</section>
 
 <script type="module" src="app.js"></script>
 </body>
