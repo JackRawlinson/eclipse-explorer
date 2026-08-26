@@ -86,6 +86,10 @@
   <button type="button" class="timeline__play" id="tl-play" aria-label="Play the shadow">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
   </button>
+  <button type="button" class="timeline__play" id="tl-stop" hidden
+          aria-label="Stop and show the whole eclipse again">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>
+  </button>
   <input type="range" id="tl-scrub" min="0" max="1000" value="0" step="1"
          aria-label="Move the shadow through the eclipse">
   <output class="timeline__time" id="tl-time">—</output>
@@ -101,6 +105,10 @@
     <fieldset class="field">
       <legend>Basemap</legend>
       <div class="chips chips--tight" id="set-basemap"></div>
+      <p class="settings__note settings__warn" id="dark-note" hidden>
+        The shadow is a dark wash, so on a dark basemap you will barely see it
+        move. Pick a light one to watch the playback.
+      </p>
     </fieldset>
 
     <fieldset class="field">

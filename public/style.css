@@ -438,6 +438,11 @@ html, body {
 .swatches button:hover { outline: 2px solid var(--focus); outline-offset: 1px; }
 
 .settings__note { margin: 0; font-size: .7rem; line-height: 1.4; color: var(--ink-dim); }
+.settings__note[hidden] { display: none; }
+.settings__warn {
+  margin-top: .5rem; padding: .4rem .5rem; border-radius: .35rem;
+  background: var(--bg-sunk); border-left: 2px solid var(--accent);
+}
 
 .settings__reset {
   align-self: flex-start;
@@ -573,6 +578,10 @@ html, body {
 }
 .timeline__play svg { width: 15px; height: 15px; fill: currentColor; }
 .timeline__play:hover { filter: brightness(1.1); }
+/* display:grid above would otherwise win over the attribute */
+.timeline__play[hidden] { display: none; }
+/* the stop button is the way back, not the main action */
+#tl-stop { background: var(--panel-2, #e2e8f0); color: var(--ink, #0f172a); }
 
 .timeline input[type="range"] { flex: 1; min-width: 0; accent-color: var(--accent); }
 

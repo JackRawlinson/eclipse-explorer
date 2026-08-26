@@ -1,8 +1,6 @@
-// Eclipse Mapper — draws precomputed eclipse geometry on a MapLibre map.
-// All the astronomy happens at build time; this file only fetches and renders.
-
 import * as maplibregl from './vendor/maplibre-gl.mjs';
-import { localCircumstances, toUT, shadowOutline } from './circumstances.js';
+import { localCircumstances, toUT, shadowOutline, instantField, penumbraEdge,
+         nightPolygon, terminator } from './circumstances.js';
 
 // OpenFreeMap's styles, quietest first. `dark` here means the paint palette and
 // the panels flip, not that the basemap is literally black.
@@ -119,6 +117,7 @@ const state = {
   shadowWindow: null,   // when the umbra is on the Earth, for the timeline
   playing: false,
   playTimer: null,
+  live: false,          // the timeline is showing one instant, not the whole eclipse
   pin: null,            // a place to ask "what is visible from here?"
   visible: null,        // that answer, for every eclipse
   threshold: (() => {
@@ -289,14 +288,26 @@ function addEclipseLayers() {
   if (!map.getSource('shadow')) {
     map.addSource('shadow', { type: 'geojson', data: EMPTY_SHADOW });
   }
-  for (const id of ['shadow-fill', 'shadow-line', 'shadow-centre']) {
+  for (const id of ['night-fill', 'terminator', 'live-edge',
+                    'shadow-fill', 'shadow-line', 'shadow-centre']) {
     if (map.getLayer(id)) map.removeLayer(id);
   }
+  map.addLayer({ id: 'night-fill', type: 'fill', source: 'shadow',
+                 filter: ['==', ['get', 'kind'], 'night'],
+                 paint: { 'fill-color': LIVE_TINT, 'fill-opacity': LIVE_NIGHT } });
+  map.addLayer({ id: 'terminator', type: 'line', source: 'shadow',
+                 filter: ['==', ['get', 'kind'], 'terminator'],
+                 paint: { 'line-color': c.penumbra, 'line-width': 1,
+                          'line-opacity': 0.5 } });
+  map.addLayer({ id: 'live-edge', type: 'line', source: 'shadow',
+                 filter: ['==', ['get', 'kind'], 'rim'],
+                 paint: { 'line-color': c.penumbra, 'line-width': 1.2,
+                          'line-opacity': 0.7 } });
   map.addLayer({ id: 'shadow-fill', type: 'fill', source: 'shadow',
-                 filter: ['==', ['geometry-type'], 'Polygon'],
-                 paint: { 'fill-color': c.central, 'fill-opacity': 0.35 } });
+                 filter: ['==', ['get', 'kind'], 'umbra'],
+                 paint: { 'fill-color': c.central, 'fill-opacity': 0.45 } });
   map.addLayer({ id: 'shadow-line', type: 'line', source: 'shadow',
-                 filter: ['==', ['geometry-type'], 'Polygon'],
+                 filter: ['==', ['get', 'kind'], 'umbra'],
                  paint: { 'line-color': c.centralCasing, 'line-width': 1.2,
                           'line-opacity': 0.9 } });
   // The umbra is a couple of hundred kilometres across: a few pixels at world
@@ -443,6 +454,8 @@ async function paintMask(url) {
 
 function applyBasemap({ restyle = true } = {}) {
   const chosen = BASEMAPS[basemapIndex()];
+  // The shadow is drawn as darkness, which a dark basemap simply absorbs.
+  if ($('dark-note')) $('dark-note').hidden = !chosen.dark;
   state.theme = chosen.dark ? 'dark' : 'light';
   document.documentElement.dataset.theme = state.theme;   // panels follow the map
   if (restyle) map.setStyle(styleUrl(chosen.id));         // style.load re-adds ours
@@ -469,9 +482,9 @@ function applyShading() {
   const set = (layer, prop, value) => {
     if (map.getLayer(layer)) map.setPaintProperty(layer, prop, value);
   };
-  set('shading', 'raster-opacity', mode === 'gradient' ? 1 : 0);
-  set('band-fill', 'fill-opacity', mode === 'bands' ? 0.09 : 0);
-  set('penumbra-fill', 'fill-opacity', mode === 'bands' ? 0.10 : 0);
+  set('shading', 'raster-opacity', state.live || mode !== 'gradient' ? 0 : 1);
+  set('band-fill', 'fill-opacity', !state.live && mode === 'bands' ? 0.09 : 0);
+  set('penumbra-fill', 'fill-opacity', !state.live && mode === 'bands' ? 0.10 : 0);
   if (state.current) setShading(state.current);           // repaint the mask
 }
 
@@ -527,6 +540,7 @@ function umbralWindow(el) {
 
 function showTimeline(entry) {
   stopPlaying();
+  setLive(false);
   const el = state.elements;
   state.shadowWindow = entry.hasPath ? umbralWindow(el) : null;
   $('timeline').hidden = !state.shadowWindow;
@@ -535,11 +549,15 @@ function showTimeline(entry) {
     return;
   }
   $('tl-scrub').value = '0';
-  setShadowAt(0);
+  setShadowAt(0, false);
 }
 
-/** Draw the umbra where it stands at `fraction` through its crossing. */
-function setShadowAt(fraction) {
+/**
+ * Draw the shadow where it stands at `fraction` through the umbra's crossing.
+ * The equal-obscuration rings come only once the timeline is being driven --
+ * simply picking an eclipse leaves the map showing the whole-eclipse view.
+ */
+function setShadowAt(fraction, showing = true) {
   const win = state.shadowWindow;
   if (!win) return;
   const t = win[0] + (win[1] - win[0]) * fraction;
@@ -547,8 +565,26 @@ function setShadowAt(fraction) {
   const { centre, ring } = shadowOutline(el, t);
 
   const features = [];
+  if (showing) {
+    const dark = nightPolygon(el, t);
+    drawLiveField(el, t, dark);
+    if (dark) {
+      features.push({ type: 'Feature', properties: { kind: 'night' },
+                      geometry: { type: 'Polygon', coordinates: dark } });
+    }
+    const line = terminator(el, t);
+    if (line) {
+      features.push({ type: 'Feature', properties: { kind: 'terminator' },
+                      geometry: { type: 'MultiLineString', coordinates: line } });
+    }
+    const rim = penumbraEdge(el, t);
+    if (rim) {
+      features.push({ type: 'Feature', properties: { kind: 'rim' },
+                      geometry: { type: 'MultiLineString', coordinates: rim } });
+    }
+  }
   if (ring) {
-    features.push({ type: 'Feature', properties: {},
+    features.push({ type: 'Feature', properties: { kind: 'umbra' },
                     geometry: { type: 'Polygon', coordinates: [ring] } });
   }
   if (centre) {
@@ -556,6 +592,7 @@ function setShadowAt(fraction) {
                     geometry: { type: 'Point', coordinates: [centre.lon, centre.lat] } });
   }
   setShadow({ type: 'FeatureCollection', features });
+  setLive(showing);
 
   const date = state.current?.date;
   $('tl-time').textContent = date
@@ -566,6 +603,146 @@ function setShadowAt(fraction) {
 function setShadow(fc) {
   const src = map.getSource('shadow');
   if (src) src.setData(fc || EMPTY_SHADOW);
+}
+
+/**
+ * The static shading and the live field are the same picture of different
+ * moments: one is the deepest a place ever gets, the other is how much is
+ * covered right now. Two readings of the same colours would be one too many, so
+ * driving the timeline swaps them over rather than stacking them.
+ */
+function setLive(on) {
+  if (state.live === on) return;
+  state.live = on;
+  const mode = state.settings.mode;
+  const set = (layer, prop, value) => {
+    if (map.getLayer(layer)) map.setPaintProperty(layer, prop, value);
+  };
+  set('shading', 'raster-opacity', on || mode !== 'gradient' ? 0 : 1);
+  set('band-fill', 'fill-opacity', !on && mode === 'bands' ? 0.09 : 0);
+  set('penumbra-fill', 'fill-opacity', !on && mode === 'bands' ? 0.10 : 0);
+  set('band-line', 'line-opacity', on ? 0 : 0.55);
+  if (map.getLayer('band-label')) {
+    map.setLayoutProperty('band-label', 'visibility', on ? 'none' : 'visible');
+  }
+  if (map.getLayer('live')) {
+    map.setLayoutProperty('live', 'visibility', on ? 'visible' : 'none');
+  }
+  const source = map.getSource('live');
+  if (source) (on ? source.play : source.pause).call(source);
+  $('tl-stop').hidden = !on;
+}
+
+// A real eclipse shadow is neutral, and faithfully drawn it is also nearly
+// invisible: brightness goes as the *uncovered* part of the Sun, so half of it
+// gone is only about a quarter of a dimming, and the last few percent are the
+// whole show. Drawn that way the penumbra reads as nothing at all. The curve
+// below is deliberately past physical -- a shadow you can actually watch cross
+// the map rather than one that only exists at the centre line.
+const LIVE_TINT = '#0b1220';
+const LIVE_DEPTH = 0.82;   // how dark it gets under totality
+const LIVE_NIGHT = 0.20;   // the night side, a flat wash
+const LIVE_CURVE = 0.9;    // near 1 spreads the darkening out into the penumbra
+// How far past the horizon the field is carried before the night side is cut
+// back off it, in Earth radii along the shadow axis.
+const LIVE_MARGIN = 0.05;
+
+// The shading is drawn per pixel into a canvas the map samples directly. Bands
+// of filled outline were the obvious alternative and were abandoned: rings that
+// run round a pole or across the antimeridian cannot be described as a closed
+// shape without a good deal of machinery, and every high-latitude eclipse does
+// both. A field has no such topology. Its edges come out soft, so the two that
+// need to be crisp -- the rim of the shadow and the day/night line -- are drawn
+// over it as lines.
+const LIVE_W = 640;
+const LIVE_H = 320;
+let live = null;
+
+function liveTarget() {
+  if (live) return live;
+  const top = Math.log(Math.tan(Math.PI / 4 + (MERCATOR_LIMIT * Math.PI) / 360));
+  const lats = new Float64Array(LIVE_H);
+  for (let j = 0; j < LIVE_H; j++) {           // rows are spaced up the Mercator
+    const y = top * (1 - (2 * (j + 0.5)) / LIVE_H);
+    lats[j] = (Math.atan(Math.sinh(y)) * 180) / Math.PI;
+  }
+  const lons = new Float64Array(LIVE_W);
+  for (let i = 0; i < LIVE_W; i++) lons[i] = -180 + (360 * (i + 0.5)) / LIVE_W;
+  const toX = (lon) => ((lon + 180) / 360) * LIVE_W;
+  const toY = (lat) => {
+    const m = Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
+    return ((1 - m / top) / 2) * LIVE_H;
+  };
+
+  // The map reads this canvas straight out of the document. Off-document it
+  // uploads nothing at all, silently -- so it is parked out of sight instead of
+  // being left detached.
+  const canvas = document.createElement('canvas');
+  canvas.width = LIVE_W;
+  canvas.height = LIVE_H;
+  canvas.setAttribute('aria-hidden', 'true');
+  canvas.style.cssText = 'position:absolute;left:-9999px;top:0;pointer-events:none';
+  document.body.appendChild(canvas);
+
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  live = { lats, lons, canvas, ctx, toX, toY,
+           field: new Float32Array(LIVE_W * LIVE_H),
+           image: ctx.createImageData(LIVE_W, LIVE_H) };
+  return live;
+}
+
+/** Paint the obscuration as it stands at `t` into the map's live raster. */
+function drawLiveField(el, t, dark) {
+  const { lats, lons, canvas, ctx, toX, toY, field, image } = liveTarget();
+  instantField(el, t, lats, lons, field, dark ? LIVE_MARGIN : 0);
+
+  const hex = LIVE_TINT.replace('#', '');
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16) || 0);
+  const px = image.data;
+  for (let k = 0, p = 0; k < field.length; k++, p += 4) {
+    const v = field[k];
+    px[p] = r; px[p + 1] = g; px[p + 2] = b;
+    px[p + 3] = v > 0
+      ? Math.round(LIVE_DEPTH * (1 - (1 - v) ** LIVE_CURVE) * 255)
+      : 0;
+  }
+  ctx.putImageData(image, 0, 0);
+
+  // Trim the night side away along a path rather than along the pixel grid.
+  // Canvas antialiases a filled path, so the day/night edge lands between
+  // pixels instead of stepping down them.
+  if (dark) {
+    const path = new Path2D();
+    for (const ring of dark) {
+      ring.forEach(([lon, lat], i) => (i ? path.lineTo(toX(lon), toY(lat))
+                                         : path.moveTo(toX(lon), toY(lat))));
+      path.closePath();
+    }
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.fill(path);
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  if (!map.getSource('live')) {
+    map.addSource('live', { type: 'canvas', canvas, animate: true,
+                            coordinates: WORLD_CORNERS });
+  }
+  if (!map.getLayer('live')) {
+    const below = ['band-fill', 'penumbra-fill', 'path-fill']
+      .find((id) => map.getLayer(id));
+    map.addLayer({ id: 'live', type: 'raster', source: 'live',
+                   paint: { 'raster-fade-duration': 0,
+                            'raster-resampling': 'linear' } }, below);
+  }
+}
+
+/** Leave the moment-by-moment view and put the whole-eclipse picture back. */
+function stopLive() {
+  stopPlaying();
+  setLive(false);
+  setShadow(null);
+  $('tl-scrub').value = '0';
+  $('tl-time').textContent = '\u2014';
 }
 
 function startPlaying() {
@@ -926,6 +1103,10 @@ function fitTo(entry) {
 
 function fitToCurrent() {
   if (state.current) fitTo(state.current);
+  setLive(false);
+  setShadow(null);
+  stopPlaying();
+  if ($('tl-scrub')) $('tl-scrub').value = '0';
 }
 
 function fitPadding() {
@@ -1332,6 +1513,7 @@ async function boot() {
     stopPlaying();
     setShadowAt(Number(ev.target.value) / 1000);
   });
+  $('tl-stop').addEventListener('click', stopLive);
   $('tl-play').addEventListener('click', () => {
     if (state.playing) stopPlaying(); else startPlaying();
   });
