@@ -55,9 +55,41 @@ echo "Deploying $FILES files from public/ to $NAME"
   --branch "$BRANCH" \
   --commit-dirty=true
 
+# A deployment can come back "complete" and serve nothing: the assets upload
+# fine and the manifest ends up empty, which looks like a healthy deploy from
+# here and like a dead site from a browser. So the deploy is not finished until
+# the live site has answered for itself.
+SITE="${CF_PAGES_SITE:-https://eclipse.tsbf.uk}"
+echo
+echo "Checking $SITE"
+sleep 4
+FAILED=0
+for path in / /app.js /style.css /data/index.json /sitemap.xml /eclipse/ \
+            /eclipse/2027/ /eclipse/2027-08-02/ /preview/20270802.png; do
+  code="$(curl -sS -o /dev/null -w '%{http_code}' "$SITE$path" || echo 000)"
+  if [ "$code" = "200" ]; then
+    printf '  %-26s %s\n' "$path" "$code"
+  else
+    printf '  %-26s %s   <-- NOT SERVING\n' "$path" "$code"
+    FAILED=1
+  fi
+done
+
+if [ "$FAILED" = "1" ]; then
+  cat >&2 <<BROKEN
+
+Some paths are not being served. The upload can succeed while the deployment
+that goes live is empty; a second run of this script usually replaces it. If it
+does not, roll back to a known good deployment in the dashboard:
+
+    Workers & Pages -> $NAME -> Deployments
+BROKEN
+  exit 1
+fi
+
 cat <<DONE
 
-Deployed. The project is served at https://$NAME.pages.dev
+Deployed and answering. The project is served at https://$NAME.pages.dev
 
 For eclipse.tsbf.uk: Cloudflare dashboard -> Workers & Pages -> $NAME ->
 Custom domains -> Set up a custom domain. The DNS record is rewritten for
