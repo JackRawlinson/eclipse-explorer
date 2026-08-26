@@ -113,7 +113,9 @@ def _prerender_html(entry):
 def _head(entry, base_url):
     url = f"{base_url}/eclipse/{slug(entry)}/"
     image = f"{base_url}/preview/{entry['id']}.png"
-    title = f"{title_for(entry)} — path and times"
+    # A partial has no path, so it is not offered one in its own title.
+    suffix = "where and when" if entry["type"] == "partial" else "path and times"
+    title = f"{title_for(entry)} — {suffix}"
     desc = description_for(entry)
     return url, image, title, desc
 
