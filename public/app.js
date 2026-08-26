@@ -2,7 +2,7 @@
 // All the astronomy happens at build time; this file only fetches and renders.
 
 import * as maplibregl from './vendor/maplibre-gl.mjs';
-import { localCircumstances, toUT } from './circumstances.js';
+import { localCircumstances, toUT, shadowOutline } from './circumstances.js';
 
 // OpenFreeMap's styles, quietest first. `dark` here means the paint palette and
 // the panels flip, not that the basemap is literally black.
@@ -41,7 +41,10 @@ const DEFAULTS = {
   gamma: 0.85,
   total: '#4c1d95',
   annular: '#c2410c',
-  times: 'local',          // 'ut' or the viewer's own clock
+  // UT by default: most eclipses you look at are somewhere else, and there is no
+  // honest way to show that place's civil time without a timezone-boundary set.
+  // Your own clock is right only when the eclipse is where you are.
+  times: 'ut',
 };
 const SETTINGS_KEY = 'eclipse-mapper.display';
 
@@ -113,6 +116,9 @@ const state = {
   settings: loadSettings(),
   theme: 'light',
   elements: null,       // Besselian elements of the selected eclipse
+  shadowWindow: null,   // when the umbra is on the Earth, for the timeline
+  playing: false,
+  playTimer: null,
   pin: null,            // a place to ask "what is visible from here?"
   visible: null,        // that answer, for every eclipse
   threshold: (() => {
@@ -279,6 +285,33 @@ function addEclipseLayers() {
                   'text-font': ['Noto Sans Regular'], 'text-allow-overlap': false },
         paint: { 'text-color': c.mark, 'text-halo-color': c.markHalo,
                  'text-halo-width': 1.4 } });
+
+  if (!map.getSource('shadow')) {
+    map.addSource('shadow', { type: 'geojson', data: EMPTY_SHADOW });
+  }
+  for (const id of ['shadow-fill', 'shadow-line', 'shadow-centre']) {
+    if (map.getLayer(id)) map.removeLayer(id);
+  }
+  map.addLayer({ id: 'shadow-fill', type: 'fill', source: 'shadow',
+                 filter: ['==', ['geometry-type'], 'Polygon'],
+                 paint: { 'fill-color': c.central, 'fill-opacity': 0.35 } });
+  map.addLayer({ id: 'shadow-line', type: 'line', source: 'shadow',
+                 filter: ['==', ['geometry-type'], 'Polygon'],
+                 paint: { 'line-color': c.centralCasing, 'line-width': 1.2,
+                          'line-opacity': 0.9 } });
+  // The umbra is a couple of hundred kilometres across: a few pixels at world
+  // zoom. The centre marker carries the animation until the footprint is big
+  // enough to read on its own.
+  map.addLayer({ id: 'shadow-centre', type: 'circle', source: 'shadow',
+                 filter: ['==', ['get', 'kind'], 'centre'],
+                 paint: {
+                   'circle-radius': ['interpolate', ['linear'], ['zoom'], 1, 6, 6, 3],
+                   'circle-color': c.central,
+                   'circle-stroke-color': c.centralCasing,
+                   'circle-stroke-width': 2,
+                   'circle-opacity': ['interpolate', ['linear'], ['zoom'], 4, 1, 7, 0],
+                   'circle-stroke-opacity': ['interpolate', ['linear'], ['zoom'], 4, 1, 7, 0],
+                 } });
 
   add({ id: 'greatest-dot', type: 'circle', filter: is('greatest'),
         paint: { 'circle-radius': 5, 'circle-opacity': 0,
@@ -461,6 +494,116 @@ function toggleGlobe() {
   }
   state.globe = false;
 }
+
+// --------------------------------------------------- running the shadow
+
+const EMPTY_SHADOW = { type: 'FeatureCollection', features: [] };
+
+/** The stretch of time the umbra is actually touching the Earth. */
+function umbralWindow(el) {
+  if (!el?.window) return null;
+  const [w0, w1] = el.window;
+  const steps = 240;
+  const on = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = w0 + ((w1 - w0) * i) / steps;
+    if (shadowOutline(el, t, 4).centre) on.push(t);
+  }
+  if (on.length < 2) return null;
+  // nudge outward to the true contacts, which fall between samples
+  const step = (w1 - w0) / steps;
+  const edge = (from, dir) => {
+    let inside = from;
+    let outside = from + dir * step;
+    for (let i = 0; i < 24; i++) {
+      const mid = (inside + outside) / 2;
+      if (shadowOutline(el, mid, 4).centre) inside = mid;
+      else outside = mid;
+    }
+    return inside;
+  };
+  return [edge(on[0], -1), edge(on.at(-1), 1)];
+}
+
+function showTimeline(entry) {
+  stopPlaying();
+  const el = state.elements;
+  state.shadowWindow = entry.hasPath ? umbralWindow(el) : null;
+  $('timeline').hidden = !state.shadowWindow;
+  if (!state.shadowWindow) {
+    setShadow(null);
+    return;
+  }
+  $('tl-scrub').value = '0';
+  setShadowAt(0);
+}
+
+/** Draw the umbra where it stands at `fraction` through its crossing. */
+function setShadowAt(fraction) {
+  const win = state.shadowWindow;
+  if (!win) return;
+  const t = win[0] + (win[1] - win[0]) * fraction;
+  const el = state.elements;
+  const { centre, ring } = shadowOutline(el, t);
+
+  const features = [];
+  if (ring) {
+    features.push({ type: 'Feature', properties: {},
+                    geometry: { type: 'Polygon', coordinates: [ring] } });
+  }
+  if (centre) {
+    features.push({ type: 'Feature', properties: { kind: 'centre' },
+                    geometry: { type: 'Point', coordinates: [centre.lon, centre.lat] } });
+  }
+  setShadow({ type: 'FeatureCollection', features });
+
+  const date = state.current?.date;
+  $('tl-time').textContent = date
+    ? `${clock(date, toUT(el, t), { seconds: true, reference: toUT(el, (win[0] + win[1]) / 2) })} ${timeLabel()}`
+    : '';
+}
+
+function setShadow(fc) {
+  const src = map.getSource('shadow');
+  if (src) src.setData(fc || EMPTY_SHADOW);
+}
+
+function startPlaying() {
+  if (!state.shadowWindow) return;
+  state.playing = true;
+  $('tl-play').innerHTML = PAUSE_ICON;
+  $('tl-play').setAttribute('aria-label', 'Pause the shadow');
+  let last = null;
+  const tick = (now) => {
+    if (!state.playing) return;
+    if (last !== null) {
+      // the whole crossing takes about twelve seconds, whatever its real length
+      const step = (now - last) / 12000;
+      let v = Number($('tl-scrub').value) / 1000 + step;
+      if (v > 1) v = 0;
+      $('tl-scrub').value = String(Math.round(v * 1000));
+      setShadowAt(v);
+    }
+    last = now;
+    state.playTimer = requestAnimationFrame(tick);
+  };
+  state.playTimer = requestAnimationFrame(tick);
+}
+
+function stopPlaying() {
+  state.playing = false;
+  if (state.playTimer) cancelAnimationFrame(state.playTimer);
+  state.playTimer = null;
+  const btn = $('tl-play');
+  if (btn) {
+    btn.innerHTML = PLAY_ICON;
+    btn.setAttribute('aria-label', 'Play the shadow');
+  }
+}
+
+const PLAY_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
+const PAUSE_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true">'
+  + '<path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg>';
 
 // ------------------------------------------------ what is visible from here
 
@@ -730,6 +873,7 @@ async function select(id, { fit = true, push = true, replace = false } = {}) {
     closePopup();
     setMapData(fc);
     setShading(entry);
+    showTimeline(entry);
     if (fit) fitTo(entry);
     prefetchNeighbours(id);
   } catch (err) {
@@ -1004,7 +1148,7 @@ function buildSettings() {
   chips($('set-basemap'), BASEMAPS.map((b) => [b.id, b.label]),
         () => s.basemap, (id) => { s.basemap = id; saveSettings(); applyBasemap(); });
 
-  chips($('set-times'), [['local', `Yours (${LOCAL_ZONE})`], ['ut', 'UT']],
+  chips($('set-times'), [['ut', 'UT'], ['local', `Yours (${LOCAL_ZONE})`]],
         () => s.times, (v) => {
           s.times = v;
           saveSettings();
@@ -1184,6 +1328,13 @@ async function boot() {
     if (b) select(b.dataset.id);
   });
   $('place-clear').addEventListener('click', () => setPin(null));
+  $('tl-scrub').addEventListener('input', (ev) => {
+    stopPlaying();
+    setShadowAt(Number(ev.target.value) / 1000);
+  });
+  $('tl-play').addEventListener('click', () => {
+    if (state.playing) stopPlaying(); else startPlaying();
+  });
   $('search').addEventListener('input', (ev) => {
     state.query = ev.target.value;
     applyFilters();

@@ -104,6 +104,70 @@ function bisectContact(el, lat, lon, tIn, tOut, umbral) {
   return (tIn + tOut) / 2;
 }
 
+/**
+ * The inverse of `observer`: a point on the fundamental plane, dropped onto the
+ * near face of the ellipsoid. Returns null where it falls outside the disc.
+ */
+export function surfacePoint(el, t, xi, eta) {
+  const st = stateAt(el, t);
+  const sinD = Math.sin(st.d);
+  const cosD = Math.cos(st.d);
+  const rho1 = Math.sqrt(1 - E2 * cosD * cosD);
+  const rho2 = Math.sqrt(1 - E2 * sinD * sinD);
+  const sd1 = sinD / rho1;
+  const cd1 = SQRT1ME2 * cosD / rho1;
+
+  const eta1 = eta / rho1;
+  const z1sq = 1 - xi * xi - eta1 * eta1;
+  if (z1sq < 0) return null;                    // off the edge of the Earth
+  const zeta1 = Math.sqrt(z1sq);
+
+  const sinU = eta1 * cd1 + zeta1 * sd1;
+  const cosUcosTheta = zeta1 * cd1 - eta1 * sd1;
+  const cosU = Math.sqrt(Math.max(0, 1 - sinU * sinU));
+
+  const theta = Math.atan2(xi, cosUcosTheta) / DEG;
+  let lon = theta - st.mu / DEG + SIDEREAL * el.deltaT * 15 / 3600;
+  lon = ((lon + 180) % 360 + 360) % 360 - 180;
+  const lat = Math.atan2(sinU, SQRT1ME2 * cosU) / DEG;
+
+  const s12 = E2 * sinD * cosD / (rho1 * rho2);
+  const c12 = SQRT1ME2 / (rho1 * rho2);
+  const zeta = rho2 * (zeta1 * c12 - eta1 * s12);
+  return { lat, lon, zeta };
+}
+
+/**
+ * Where the umbra is standing at one instant: the shadow circle on the
+ * fundamental plane, dropped onto the ground. Returns the outline as
+ * [lon, lat] pairs and the centre, or null while the shadow misses the Earth.
+ *
+ * The cone narrows with height, so the radius depends on where the point lands
+ * and the two are solved together -- the same iteration the build uses.
+ */
+export function shadowOutline(el, t, steps = 72) {
+  const st = stateAt(el, t);
+  const centre = surfacePoint(el, t, st.x, st.y);
+
+  const ring = [];
+  for (let i = 0; i < steps; i++) {
+    const angle = (i / steps) * 2 * Math.PI;
+    let radius = Math.abs(st.l2);
+    let point = null;
+    for (let pass = 0; pass < 4; pass++) {
+      point = surfacePoint(el, t,
+                           st.x + radius * Math.cos(angle),
+                           st.y + radius * Math.sin(angle));
+      if (!point) break;
+      radius = Math.abs(st.l2 - point.zeta * el.tanf2);
+    }
+    if (!point) return { centre, ring: null };   // partly off the limb
+    ring.push([point.lon, point.lat]);
+  }
+  if (ring.length) ring.push(ring[0]);
+  return { centre, ring };
+}
+
 /** Fraction of the Sun's area hidden, from the fraction of its diameter. */
 export function obscurationFrom(magnitude, ratio) {
   if (magnitude <= 0) return 0;

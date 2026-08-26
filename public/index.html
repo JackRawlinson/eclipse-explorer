@@ -82,6 +82,15 @@
 
 </div><!-- .rail -->
 
+<div class="timeline" id="timeline" hidden>
+  <button type="button" class="timeline__play" id="tl-play" aria-label="Play the shadow">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+  </button>
+  <input type="range" id="tl-scrub" min="0" max="1000" value="0" step="1"
+         aria-label="Move the shadow through the eclipse">
+  <output class="timeline__time" id="tl-time">—</output>
+</div>
+
 <section class="settings" id="settings" hidden>
   <header class="settings__head">
     <h2>Display</h2>

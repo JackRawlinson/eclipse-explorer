@@ -545,3 +545,45 @@ html, body {
 .facts__more summary:hover { color: var(--ink); }
 .facts__more[open] summary { margin-bottom: .2rem; }
 .facts__more .facts { font-size: .76rem; }
+
+/* ------------------------------------------------------- shadow timeline */
+
+.timeline {
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 1.6rem;
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  width: min(30rem, calc(100vw - var(--panel-w) - 6rem));
+  padding: .4rem .7rem;
+  background: var(--bg);
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+}
+.timeline[hidden] { display: none; }
+
+.timeline__play {
+  flex: none; width: 1.9rem; height: 1.9rem;
+  display: grid; place-items: center;
+  border: 0; border-radius: 50%;
+  background: var(--accent); color: #fff; cursor: pointer;
+}
+.timeline__play svg { width: 15px; height: 15px; fill: currentColor; }
+.timeline__play:hover { filter: brightness(1.1); }
+
+.timeline input[type="range"] { flex: 1; min-width: 0; accent-color: var(--accent); }
+
+.timeline__time {
+  flex: none; min-width: 6.2rem; text-align: right;
+  font-size: .78rem; font-variant-numeric: tabular-nums; color: var(--ink);
+}
+
+@media (max-width: 46rem) {
+  .timeline {
+    left: .5rem; right: .5rem; transform: none;
+    width: auto; bottom: 4rem;
+  }
+}
