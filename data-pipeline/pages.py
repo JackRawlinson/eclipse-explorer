@@ -1,18 +1,18 @@
-"""A standalone landing page per eclipse, kept apart from the app on purpose.
+"""A page per eclipse that IS the map, carrying that eclipse's facts as text.
 
-The first version of this made each page a full copy of the application and
-taught the app to live at those addresses. That coupled the fragile thing --
-hundreds of generated documents that all had to deploy together -- to the
-critical one, and when the pages layer wobbled the map broke with it.
+Arriving from a search lands straight on the interactive map with the right
+eclipse selected -- no interstitial, no second click. What a crawler reads and
+what the script renders are the same facts in the same panel.
 
-So these are leaf documents now. No script, no shared stylesheet, nothing that
-has to stay in step with the app: facts, a preview image, links sideways to the
-neighbouring eclipses and up to the year, and one link into the map itself,
-which still lives at /?e= and is never rewritten. A missing landing page is a
-missing landing page; the map cannot be touched from here.
+Each page is stamped from the site's own index.html AT GENERATION TIME, by the
+deploy script and by the container's pages stage, never ahead of time. That is
+the lesson of the first attempt: pages generated once and stored drift out of
+step with app.js; pages stamped from the markup being shipped cannot.
 
-Everything is rendered from index.json alone, so the container builds these in
-the data stage with no sight of the site's markup.
+The year and list pages stay plain documents -- the app has no year view for
+them to be. And if a deployment ships short, a missing page answers 404 and the
+404 page bounces /eclipse/<date>/ into /?e=, so the map stays reachable even
+then.
 """
 
 import html
@@ -169,39 +169,50 @@ def _shell(title, desc, canonical, body, image=None):
 """
 
 
-def render_eclipse(entry, neighbours, base_url):
-    prev_e, next_e = neighbours
+def render_eclipse(template, entry, base_url):
+    """The app, with this eclipse's identity and facts written into it."""
+    import re
     title = title_for(entry)
+    suffix = "where and when" if entry["type"] == "partial" else "path and times"
+    full = f"{title} — {suffix}"
     desc = description_for(entry)
     url = f"{base_url}/eclipse/{slug(entry)}/"
     image = f"{base_url}/preview/{entry['id']}.png"
-    app = f"/?e={entry['id']}"
-    year = entry["date"][:4]
+    page = template
 
+    page = re.sub(r"<title>.*?</title>", f"<title>{html.escape(full)}</title>",
+                  page, count=1, flags=re.S)
+    for pattern, value in [
+        (r'<meta name="description" content="[^"]*">',
+         f'<meta name="description" content="{html.escape(desc, quote=True)}">'),
+        (r'<link rel="canonical" href="[^"]*">',
+         f'<link rel="canonical" href="{url}">'),
+        (r'<meta property="og:url" content="[^"]*">',
+         f'<meta property="og:url" content="{url}">'),
+        (r'<meta property="og:title" content="[^"]*">',
+         f'<meta property="og:title" content="{html.escape(full, quote=True)}">'),
+        (r'<meta property="og:description" content="[^"]*">',
+         f'<meta property="og:description" content="{html.escape(desc, quote=True)}">'),
+        (r'<meta property="og:image" content="[^"]*">',
+         f'<meta property="og:image" content="{image}">'),
+        (r'<meta property="og:image:alt" content="[^"]*">',
+         f'<meta property="og:image:alt" content="'
+         f'{html.escape(title, quote=True)}, drawn on a world map.">'),
+    ]:
+        page = re.sub(pattern, value, page, count=1)
+    page = re.sub(r'<h1 class="sr-only">.*?</h1>',
+                  f'<h1 class="sr-only">{html.escape(title)}</h1>',
+                  page, count=1, flags=re.S)
+
+    # The facts, in the panel the script fills in anyway: the script replaces
+    # this wholesale the moment it selects, so nothing needs removing later.
     facts = "".join(f"<dt>{html.escape(k)}</dt><dd>{html.escape(v)}</dd>"
                     for k, v in _rows(entry))
-    sideways = []
-    if prev_e:
-        sideways.append(f'<a href="/eclipse/{slug(prev_e)}/">&larr; '
-                        f'{html.escape(title_for(prev_e))}</a>')
-    sideways.append(f'<a href="/eclipse/{year}/">All eclipses in {year}</a>')
-    if next_e:
-        sideways.append(f'<a href="/eclipse/{slug(next_e)}/">'
-                        f'{html.escape(title_for(next_e))} &rarr;</a>')
-
-    body = f"""<h1>{html.escape(title)}</h1>
-<p class="lead">{html.escape(desc)}</p>
-<a class="map-link" href="{app}" title="Open this eclipse on the interactive map">
-  <img src="/preview/{entry['id']}.png" width="1200" height="630"
-       alt="{html.escape(title, quote=True)}, drawn on a world map.">
-</a>
-<a class="cta" href="{app}">Open on the interactive map</a>
-<dl>{facts}</dl>
-<nav>{''.join(sideways)}</nav>"""
-    return _shell(f"{title} — path and times"
-                  if entry["type"] != "partial"
-                  else f"{title} — where and when",
-                  desc, url, body, image)
+    page = page.replace(
+        '<div id="facts"></div>',
+        f'<div id="facts"><p class="facts__note">{html.escape(desc)}</p>'
+        f'<dl class="facts">{facts}</dl></div>', 1)
+    return page
 
 
 def render_year(year, entries, base_url):
@@ -268,14 +279,14 @@ def render_sitemap(entries, base_url):
 
 def write_all(entries, public_dir, base_url):
     """Every leaf page, the year and list pages, and the sitemap."""
+    with open(os.path.join(public_dir, "index.html")) as fh:
+        template = fh.read()
     ordered = sorted(entries, key=lambda e: e["date"])
-    for i, entry in enumerate(ordered):
-        neighbours = (ordered[i - 1] if i else None,
-                      ordered[i + 1] if i + 1 < len(ordered) else None)
+    for entry in ordered:
         directory = os.path.join(public_dir, "eclipse", slug(entry))
         os.makedirs(directory, exist_ok=True)
         with open(os.path.join(directory, "index.html"), "w") as fh:
-            fh.write(render_eclipse(entry, neighbours, base_url))
+            fh.write(render_eclipse(template, entry, base_url))
 
     by_year = {}
     for entry in ordered:

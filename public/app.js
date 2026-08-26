@@ -1015,8 +1015,10 @@ const hoursOf = (text) => {
 // ------------------------------------------------------------------ data
 
 /** Data URLs carry the build stamp, so a rebuild is never served from cache. */
+// Rooted, not relative: selecting an eclipse rewrites the address to
+// /eclipse/<date>/, which would move what a relative URL resolves against.
 const dataUrl = (name) =>
-  `data/${name}${state.version ? `?v=${encodeURIComponent(state.version)}` : ''}`;
+  `/data/${name}${state.version ? `?v=${encodeURIComponent(state.version)}` : ''}`;
 
 async function loadGeometry(id) {
   if (geoCache.has(id)) return geoCache.get(id);
@@ -1073,9 +1075,10 @@ async function select(id, { fit = true, push = true, replace = false } = {}) {
 /** The URL carries the selection and any pinned place, so a view is shareable. */
 function syncUrl({ replace = false } = {}) {
   const q = new URLSearchParams();
-  if (state.current) q.set('e', state.current.id);
   if (state.pin) q.set('at', `${state.pin.lat.toFixed(4)},${state.pin.lon.toFixed(4)}`);
-  const url = `${location.pathname}?${q}`;
+  const query = q.toString();
+  const path = state.current ? `/eclipse/${state.current.date}/` : '/';
+  const url = query ? `${path}?${query}` : path;
   if (replace || url === location.pathname + location.search) {
     history.replaceState({}, '', url);
   } else {
@@ -1505,7 +1508,18 @@ function defaultId() {
   return (state.all.find((e) => e.date >= today) || state.all.at(-1)).id;
 }
 
+/**
+ * Which eclipse the address asks for. Every eclipse has a page of its own, so
+ * arriving on one is an ordinary page load; from then on the path is rewritten
+ * in place and stepping stays the instant swap it always was. The old ?e= form
+ * is still read, so links made before the pages existed keep working.
+ */
 function idFromUrl() {
+  const onPath = location.pathname.match(/^\/eclipse\/(\d{4}-\d{2}-\d{2})\/?$/);
+  if (onPath) {
+    const dated = state.all.find((e) => e.date === onPath[1]);
+    if (dated) return dated.id;
+  }
   const want = new URLSearchParams(location.search).get('e');
   return state.all.some((e) => e.id === want) ? want : null;
 }
@@ -1516,7 +1530,7 @@ async function boot() {
   let index;
   try {
     // revalidate the index every time: it is what tells us the current build
-    index = await fetch('data/index.json', { cache: 'no-cache' }).then((r) => {
+    index = await fetch('/data/index.json', { cache: 'no-cache' }).then((r) => {
       if (!r.ok) throw new Error(r.status);
       return r.json();
     });

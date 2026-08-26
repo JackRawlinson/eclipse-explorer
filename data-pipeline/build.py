@@ -17,7 +17,6 @@ from shapely.geometry import MultiPolygon, Polygon
 import besselian as B
 import config
 import geometry as G
-import pages
 import preview
 import raster as R
 import shading
@@ -421,11 +420,6 @@ def main(only=None):
                 "eclipses": index,
             }, fh, separators=(",", ":"))
 
-        # Standalone landing pages, built from the finished index alone. They
-        # carry no script and share nothing with the app, so nothing here has
-        # to stay in step with the site's own markup.
-        written = pages.write_all(index, PUBLIC_DIR, config.BASE_URL)
-        print(f"  wrote {written} landing pages", flush=True)
     print(f"done: {len(index)} eclipses, {total_bytes / 1024 / 1024:.1f} MB total, "
           f"{time.time() - started:.0f}s")
 

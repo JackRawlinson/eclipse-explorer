@@ -32,9 +32,17 @@
 <body>
 <main>
   <h1>There is nothing at this address</h1>
-  <p>Every eclipse lives on the map itself, picked from the list rather than
-    from a URL of its own.</p>
+  <p>Whatever was here has moved or never was. The map has every eclipse.</p>
   <a href="/">Open the map</a>
 </main>
+<script>
+// If the missing page is an eclipse's own address -- which happens if a
+// deployment ships short -- the map can still show that eclipse from its query
+// form. Send the visitor there rather than leaving them at a dead end.
+(function () {
+  var m = location.pathname.match(/^\/eclipse\/(\d{4})-(\d{2})-(\d{2})\/?$/);
+  if (m) location.replace('/?e=' + m[1] + m[2] + m[3]);
+})();
+</script>
 </body>
 </html>

@@ -21,7 +21,13 @@ NAME="${CF_PAGES_PROJECT:-eclipse}"
 BRANCH="${CF_PAGES_BRANCH:-main}"
 WRANGLER=(npx --yes wrangler@latest)
 
-for required in public/data/index.json public/data/elements.json; do
+# The eclipse pages are the app with facts stamped in, so they are rebuilt from
+# the markup being shipped on every deploy -- they cannot go stale against it.
+PY="data-pipeline/.venv/bin/python"
+[ -x "$PY" ] || PY="python3"
+"$PY" data-pipeline/pages.py || { echo "page generation failed" >&2; exit 1; }
+
+for required in public/data/index.json public/data/elements.json public/sitemap.xml; do
   if [ ! -s "$required" ]; then
     echo "$required is missing. Run the pipeline first:" >&2
     echo "    python data-pipeline/build.py" >&2

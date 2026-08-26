@@ -29,6 +29,15 @@ COPY data-pipeline data-pipeline
 
 RUN python data-pipeline/build.py && test -s public/data/index.json
 
+# ---------------------------------------------------------------- pages
+# Each eclipse page is the app with that eclipse's facts stamped in, so this
+# stage depends on the site's markup -- and on nothing else. It runs in a
+# tenth of a second; the geometry above stays cached when markup changes.
+FROM pipeline AS pages
+
+COPY public/index.html public/index.html
+RUN python data-pipeline/pages.py && test -s public/sitemap.xml
+
 # ---------------------------------------------------------------- site
 FROM nginx:1.27-alpine
 
@@ -44,8 +53,8 @@ COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY public /usr/share/nginx/html
 COPY --from=pipeline /src/public/data /usr/share/nginx/html/data
 COPY --from=pipeline /src/public/preview /usr/share/nginx/html/preview
-COPY --from=pipeline /src/public/eclipse /usr/share/nginx/html/eclipse
-COPY --from=pipeline /src/public/sitemap.xml /usr/share/nginx/html/sitemap.xml
+COPY --from=pages /src/public/eclipse /usr/share/nginx/html/eclipse
+COPY --from=pages /src/public/sitemap.xml /usr/share/nginx/html/sitemap.xml
 
 EXPOSE 80
 
