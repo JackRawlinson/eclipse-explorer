@@ -4,6 +4,12 @@
 # result has no Python in it, no build tools, and nothing that runs at request
 # time. Map tiles come from openfreemap.org straight to the browser, so the
 # container itself needs no network access at all once it is built.
+#
+# The site never enters the first stage. That is deliberate: the pipeline layer
+# is keyed on data-pipeline/ alone, so editing the interface leaves it cached
+# and the rebuild takes seconds instead of regenerating four hundred eclipses.
+# Changing anything under data-pipeline/ regenerates them, which is correct --
+# that is exactly when the paths can have moved.
 
 # ---------------------------------------------------------------- data
 FROM python:3.12-slim AS pipeline
@@ -17,9 +23,9 @@ WORKDIR /src
 COPY data-pipeline/requirements.txt data-pipeline/requirements.txt
 RUN pip install --no-cache-dir -r data-pipeline/requirements.txt
 
-# cache/ holds the canon extract, so this stage needs no network
+# cache/ holds the canon extract, so this stage needs no network. build.py makes
+# its own output directory, so nothing from the site is needed here.
 COPY data-pipeline data-pipeline
-COPY public public
 
 RUN python data-pipeline/build.py && test -s public/data/index.json
 
@@ -31,7 +37,12 @@ LABEL org.opencontainers.image.title="Eclipse Mapper" \
       org.opencontainers.image.licenses="NASA eclipse predictions by Fred Espenak, GSFC"
 
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=pipeline /src/public /usr/share/nginx/html
+
+# The site comes straight from the build context; only the generated data comes
+# from the pipeline stage. public/data is in .dockerignore, so the first of
+# these cannot smuggle in a stale local copy.
+COPY public /usr/share/nginx/html
+COPY --from=pipeline /src/public/data /usr/share/nginx/html/data
 
 EXPOSE 80
 
