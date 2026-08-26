@@ -17,6 +17,8 @@ from shapely.geometry import MultiPolygon, Polygon
 import besselian as B
 import config
 import geometry as G
+import pages
+import preview
 import raster as R
 import shading
 
@@ -361,8 +363,13 @@ def _bbox_of(geom):
 
 # --------------------------------------------------------------------------
 
+PUBLIC_DIR = os.path.dirname(config.OUTPUT_DIR)
+PREVIEW_DIR = os.path.join(PUBLIC_DIR, "preview")
+
+
 def main(only=None):
     os.makedirs(config.OUTPUT_DIR, exist_ok=True)
+    os.makedirs(PREVIEW_DIR, exist_ok=True)
     catalog = [(e, x) for e, x in B.load_catalog()
                if config.YEAR_MIN <= e.year <= config.YEAR_MAX]
     if only:
@@ -387,6 +394,9 @@ def main(only=None):
                 fh.write(shade)
             total_bytes += len(shade)
             entry["shading"] = True
+        # The landing page's share image, drawn from the geometry just computed.
+        with open(os.path.join(PREVIEW_DIR, f"{el.key}.png"), "wb") as fh:
+            fh.write(preview.render(collection, entry))
         index.append(entry)
         if n % 25 == 0 or n == len(catalog):
             rate = n / max(1e-9, time.time() - started)
@@ -410,6 +420,12 @@ def main(only=None):
                 "count": len(index),
                 "eclipses": index,
             }, fh, separators=(",", ":"))
+
+        # Standalone landing pages, built from the finished index alone. They
+        # carry no script and share nothing with the app, so nothing here has
+        # to stay in step with the site's own markup.
+        written = pages.write_all(index, PUBLIC_DIR, config.BASE_URL)
+        print(f"  wrote {written} landing pages", flush=True)
     print(f"done: {len(index)} eclipses, {total_bytes / 1024 / 1024:.1f} MB total, "
           f"{time.time() - started:.0f}s")
 

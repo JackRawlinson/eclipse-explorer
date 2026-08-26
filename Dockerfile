@@ -43,6 +43,9 @@ COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 # these cannot smuggle in a stale local copy.
 COPY public /usr/share/nginx/html
 COPY --from=pipeline /src/public/data /usr/share/nginx/html/data
+COPY --from=pipeline /src/public/preview /usr/share/nginx/html/preview
+COPY --from=pipeline /src/public/eclipse /usr/share/nginx/html/eclipse
+COPY --from=pipeline /src/public/sitemap.xml /usr/share/nginx/html/sitemap.xml
 
 EXPOSE 80
 

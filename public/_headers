@@ -30,6 +30,17 @@
 /vendor/*
   Cache-Control: no-cache
 
+# Landing pages and the sitemap: revalidate, they change when the pipeline runs.
+/eclipse/*
+  Cache-Control: no-cache
+
+/sitemap.xml
+  Cache-Control: no-cache
+
+# Share images, fetched by social scrapers via each page's og:image.
+/preview/*
+  Cache-Control: public, max-age=2592000
+
 # Per-eclipse geometry and shading masks. Every request for these carries a ?v=
 # build stamp taken from index.json, so a new build is a new URL and these can
 # be cached hard without ever going stale.
