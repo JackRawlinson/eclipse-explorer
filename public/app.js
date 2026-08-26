@@ -544,6 +544,8 @@ function showTimeline(entry) {
   const el = state.elements;
   state.shadowWindow = entry.hasPath ? umbralWindow(el) : null;
   $('timeline').hidden = !state.shadowWindow;
+  // The sheet needs to know to leave room for it; see the mobile rule.
+  document.body.classList.toggle('has-timeline', !!state.shadowWindow);
   if (!state.shadowWindow) {
     setShadow(null);
     return;

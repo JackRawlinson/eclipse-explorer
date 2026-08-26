@@ -319,7 +319,17 @@ html, body {
     gap: .5rem;
   }
   .panel--main { flex: 1 1 auto; min-height: 0; }
-  .details { max-height: 38%; }
+
+  /* The sheet is sized by its content and then capped at 68vh, so its height is
+     never definite -- which means a percentage cap on the details resolves to
+     nothing and was silently dropped. With no cap and shrinking switched off it
+     kept its full content height, squeezed the list below its own minimum, and
+     the list spilled out and painted over it.
+
+     So the list keeps its size and the details gives way instead: it is the one
+     that scrolls, and it is the half you read rather than navigate. */
+  .picker { flex: 0 0 auto; min-height: 0; overflow: hidden; }
+  .details { flex: 1 1 auto; min-height: 0; max-height: none; }
   .list { max-height: 34vh; }
 }
 
@@ -562,13 +572,19 @@ html, body {
 .timeline {
   position: absolute;
   z-index: 3;
-  left: 50%;
-  transform: translateX(-50%);
+  /* Centred in the space beside the rail rather than in the viewport. Centring
+     on the viewport put it under the rail on a narrow desktop or a portrait
+     tablet, where half of a centred bar reaches further left than the rail's
+     right edge. */
+  left: calc(var(--panel-w) + 2.25rem);
+  right: 1.5rem;
+  margin-inline: auto;
   bottom: 1.6rem;
   display: flex;
   align-items: center;
   gap: .6rem;
-  width: min(30rem, calc(100vw - var(--panel-w) - 6rem));
+  width: auto;
+  max-width: 30rem;
   padding: .4rem .7rem;
   background: var(--bg);
   border-radius: 999px;
@@ -596,9 +612,28 @@ html, body {
   font-size: .78rem; font-variant-numeric: tabular-nums; color: var(--ink);
 }
 
-@media (max-width: 46rem) {
+/* Same breakpoint as the rail above: wherever that becomes a bottom sheet, the
+   timeline has to be laid out around it. A short landscape phone is wide enough
+   to miss a width-only rule and still tall enough to collide. */
+@media (max-width: 46rem), (max-height: 34rem) {
   .timeline {
     left: .5rem; right: .5rem; transform: none;
-    width: auto; bottom: 4rem;
+    width: auto; bottom: .5rem;
   }
+  /* The timeline floats over the map, and on a phone the open sheet reaches
+     the bottom of the screen, so the two were sitting on top of each other.
+     The sheet stops above it instead -- but only when there is one, since a
+     partial eclipse has no shadow to play. */
+  body.has-timeline .rail { bottom: 3.9rem; }
+}
+
+/* A phone on its side has barely any height to divide. The list keeping its
+   size, which is right in portrait, leaves the details nothing at all and it
+   spills out of the sheet -- so here the list gives way instead, and both
+   halves keep a floor to stand on. */
+@media (max-height: 34rem) {
+  .rail { max-height: 88vh; }
+  .picker { flex: 1 1 auto; min-height: 0; }
+  .details { flex: 0 1 auto; min-height: 3.5rem; max-height: 8rem; }
+  .list { min-height: 3rem; max-height: none; }
 }
