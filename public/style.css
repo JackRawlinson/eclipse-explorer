@@ -506,6 +506,7 @@ html, body {
 /* ------------------------------------------------- filtering by a place */
 
 .pinbar { display: flex; align-items: center; gap: .4rem; }
+.pinbar[hidden] { display: none; }
 
 .pinbar__use {
   border: 1px solid var(--line); border-radius: 8px;
@@ -531,3 +532,16 @@ html, body {
 .pinbar__clear[hidden] { display: none; }
 
 #place-threshold[hidden] { display: none; }
+
+/* Short values pair up two to a row so the details fit without scrolling. */
+.facts--pairs { grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr); }
+.facts--pairs dd { margin-right: .4rem; }
+
+.facts__more { font-size: .78rem; }
+.facts__more summary {
+  cursor: pointer; color: var(--ink-dim); font-size: .74rem;
+  padding: .15rem 0; list-style-position: outside;
+}
+.facts__more summary:hover { color: var(--ink); }
+.facts__more[open] summary { margin-bottom: .2rem; }
+.facts__more .facts { font-size: .76rem; }

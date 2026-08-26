@@ -41,6 +41,7 @@ const DEFAULTS = {
   gamma: 0.85,
   total: '#4c1d95',
   annular: '#c2410c',
+  times: 'local',          // 'ut' or the viewer's own clock
 };
 const SETTINGS_KEY = 'eclipse-mapper.display';
 
@@ -293,7 +294,29 @@ function addEclipseLayers() {
 
 function setMapData(fc) {
   const src = map.getSource('eclipse');
-  if (src) src.setData(fc);
+  if (src) src.setData(localiseMarks(fc));
+}
+
+/**
+ * The shadow-centre ticks ship as UT strings. If the panel is showing local time
+ * the map has to agree, so relabel them rather than have the two contradict.
+ */
+function localiseMarks(fc) {
+  if (state.settings.times === 'ut') return fc;
+  const date = fc.properties?.id
+    ? `${fc.properties.id.slice(0, 4)}-${fc.properties.id.slice(4, 6)}-${fc.properties.id.slice(6, 8)}`
+    : null;
+  if (!date) return fc;
+  const marks = fc.features.filter((f) => f.properties.kind === 'timeMark');
+  if (!marks.length) return fc;
+  const ref = hoursOf(marks[Math.floor(marks.length / 2)].properties.label);
+  return {
+    ...fc,
+    features: fc.features.map((f) => (f.properties.kind === 'timeMark'
+      ? { ...f, properties: { ...f.properties,
+          label: clock(date, hoursOf(f.properties.label), { reference: ref }) } }
+      : f)),
+  };
 }
 
 async function setShading(entry) {
@@ -466,25 +489,18 @@ function setPin(lngLat, { push = true } = {}) {
   state.pin = lngLat ? { lat: lngLat.lat, lon: lngLat.lng ?? lngLat.lon } : null;
   drawPin();
   if (push) syncUrl();
-  const at = $('pinbar-at');
-  const clear = $('place-clear');
+  const bar = $('pinbar');
   const chips = $('place-threshold');
   if (!state.pin) {
     state.visible = null;
-    at.hidden = true;
-    clear.hidden = true;
+    bar.hidden = true;
     chips.hidden = true;
-    $('place-locate').hidden = false;
-    $('place-why').hidden = false;
     applyFilters();
     return;
   }
-  at.textContent = formatLatLon(state.pin.lat, state.pin.lon, 2);
-  at.hidden = false;
-  clear.hidden = false;
+  $('pinbar-at').textContent = `From ${formatLatLon(state.pin.lat, state.pin.lon, 2)}`;
+  bar.hidden = false;
   chips.hidden = false;
-  $('place-locate').hidden = true;
-  $('place-why').hidden = true;
   computeVisible();
 }
 
@@ -579,7 +595,9 @@ function circumstancesHTML(s, lngLat) {
   }
 
   const el = state.elements;
-  const clock = (t) => hms(toUT(el, t));
+  const date = state.current?.date || new Date().toISOString().slice(0, 10);
+  const ref = toUT(el, s.tMax);
+  const when = (t, opts) => clock(date, toUT(el, t), { reference: ref, ...opts });
   const rows = [];
 
   const head = s.durationS
@@ -588,14 +606,15 @@ function circumstancesHTML(s, lngLat) {
     : `<p class="pop__head">${formatObscuration(s.obscuration)} of the Sun covered</p>`;
 
   if (s.durationS) {
-    rows.push([s.total ? 'Totality' : 'Annularity', `${clock(s.c2)} – ${clock(s.c3)} UT`]);
+    rows.push([s.total ? 'Totality' : 'Annularity',
+               `${when(s.c2)} – ${when(s.c3)} ${timeLabel()}`]);
     rows.push(['Obscuration', formatObscuration(s.obscuration)]);
   }
-  rows.push(['Maximum', `${clock(s.tMax)} UT`]);
+  rows.push(['Maximum', `${when(s.tMax, { seconds: true })} ${timeLabel()}`]);
   rows.push(['Magnitude', s.magnitude.toFixed(3)]);
   rows.push(['Sun altitude', `${s.sunAlt.toFixed(0)}°`]);
   if (s.c1 !== undefined && s.c4 !== undefined) {
-    rows.push(['Partial', `${clock(s.c1)} – ${clock(s.c4)} UT`]);
+    rows.push(['Partial', `${when(s.c1)} – ${when(s.c4)} ${timeLabel()}`]);
   }
 
   const notes = [];
@@ -613,11 +632,56 @@ function circumstancesHTML(s, lngLat) {
     + 'data-act="pin">See every eclipse here</button></p>';
 }
 
-function hms(hours) {
+const LOCAL_ZONE = (() => {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'local time'; }
+  catch { return 'local time'; }
+})();
+
+/**
+ * Turn an hour-of-day in UT into a real instant. Eclipse times run a few hours
+ * either side of greatest eclipse, so one that reads as far away from it has
+ * wrapped past midnight and belongs to the neighbouring day.
+ */
+function instantFor(dateISO, hours, referenceHours) {
+  const [y, m, d] = dateISO.split('-').map(Number);
+  let shift = 0;
+  if (Number.isFinite(referenceHours)) {
+    const gap = hours - referenceHours;
+    if (gap > 12) shift = -1;
+    else if (gap < -12) shift = 1;
+  }
+  const whole = Math.floor(hours);
+  const minutes = Math.floor((hours - whole) * 60);
+  const seconds = Math.round((((hours - whole) * 60) - minutes) * 60);
+  return new Date(Date.UTC(y, m - 1, d + shift, whole, minutes, seconds));
+}
+
+/** A clock time, in UT or the viewer's zone depending on the setting. */
+function clock(dateISO, hours, { seconds = false, reference } = {}) {
+  if (state.settings.times === 'ut') return hms(hours, seconds);
+  const when = instantFor(dateISO, hours, reference);
+  return when.toLocaleTimeString([], {
+    hour: '2-digit', minute: '2-digit',
+    ...(seconds ? { second: '2-digit' } : {}),
+    hour12: false,
+  });
+}
+
+const timeLabel = () => (state.settings.times === 'ut' ? 'UT' : 'local');
+
+function hms(hours, seconds = true) {
   const total = Math.round(((hours % 24) + 24) % 24 * 3600);
   const pad = (n) => String(n).padStart(2, '0');
-  return `${pad(Math.floor(total / 3600) % 24)}:${pad(Math.floor(total / 60) % 60)}:${pad(total % 60)}`;
+  const hh = pad(Math.floor(total / 3600) % 24);
+  const mm = pad(Math.floor(total / 60) % 60);
+  return seconds ? `${hh}:${mm}:${pad(total % 60)}` : `${hh}:${mm}`;
 }
+
+/** Parse "HH:MM" or "HH:MM:SS" from the index back into hours. */
+const hoursOf = (text) => {
+  const [h = 0, m = 0, sec = 0] = text.split(':').map(Number);
+  return h + m / 60 + sec / 3600;
+};
 
 // ------------------------------------------------------------------ data
 
@@ -808,38 +872,42 @@ function markCurrentInList() {
 // -------------------------------------------------------------- the facts
 
 function renderInfo(e) {
-  const rows = [
-    ['Type', `${titleCase(e.type)}<span class="facts__code"> (${e.typeCode})</span>`],
-    ['Magnitude', e.magnitude.toFixed(4)],
-    ['Gamma', signed(e.gamma, 4)],
-    ['Saros', String(e.saros)],
-    ['Greatest at', `${e.greatest.ut} UT`],
-    ['…located', formatLatLon(e.greatest.lat, e.greatest.lon)],
-    ['…Sun altitude', `${e.greatest.sunAlt.toFixed(0)}°`],
-  ];
-  if (e.centralDurationS) rows.push(['Max duration', formatDuration(e.centralDurationS)]);
-  if (e.pathWidthKm) rows.push(['Path width', `${Math.round(e.pathWidthKm)} km`]);
-  if (e.pathBegins) rows.push(['Path on ground', `${e.pathBegins}–${e.pathEnds} UT`]);
-  if (e.partialBegins) rows.push(['Partial phase', `${e.partialBegins}–${e.partialEnds} UT`]);
-  rows.push(['ΔT used', `${e.deltaT.toFixed(1)} s`]);
+  const ref = e.greatest.ut ? hoursOf(e.greatest.ut) : 12;
+  const at = (hhmm, opts) => clock(e.date, hoursOf(hhmm), { reference: ref, ...opts });
+  const span = (from, to) => `${at(from)}–${at(to)} ${timeLabel()}`;
 
-  const dl = document.createElement('dl');
-  dl.className = 'facts';
-  for (const [k, v] of rows) {
-    const dt = document.createElement('dt');
-    dt.textContent = k;
-    const dd = document.createElement('dd');
-    dd.innerHTML = v;
-    dl.append(dt, dd);
-  }
+  // Short values pair up two to a row; anything carrying a time range needs the width.
+  const pairs = [
+    ['Type', `${titleCase(e.type)}<span class="facts__code"> ${e.typeCode}</span>`],
+    ['Saros', String(e.saros)],
+    ['Magnitude', e.magnitude.toFixed(3)],
+  ];
+  if (e.pathWidthKm) pairs.push(['Width', `${Math.round(e.pathWidthKm)} km`]);
+
+  const wide = [];
+  if (e.centralDurationS) wide.push(['Longest', formatDuration(e.centralDurationS)]);
+  wide.push(['Greatest', `${at(e.greatest.ut, { seconds: true })} ${timeLabel()}`]);
+  if (e.pathBegins) wide.push(['Path', span(e.pathBegins, e.pathEnds)]);
+  if (e.partialBegins) wide.push(['Partial', span(e.partialBegins, e.partialEnds)]);
+
+  const more = [
+    ['Gamma', signed(e.gamma, 4)],
+    ['Greatest at', formatLatLon(e.greatest.lat, e.greatest.lon)],
+    ['Sun altitude', `${e.greatest.sunAlt.toFixed(0)}\u00b0`],
+    ['\u0394T used', `${e.deltaT.toFixed(1)} s`],
+  ];
+
+  const dl = (rows, cls) =>
+    `<dl class="facts ${cls || ''}">`
+    + rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')
+    + '</dl>';
+
   const note = noteFor(e);
-  if (note) {
-    const p = document.createElement('p');
-    p.className = 'facts__note';
-    p.textContent = note;
-    dl.append(p);
-  }
-  $('facts').replaceChildren(dl);
+  $('facts').innerHTML =
+    dl(pairs, 'facts--pairs')
+    + dl(wide)
+    + (note ? `<p class="facts__note">${note}</p>` : '')
+    + `<details class="facts__more"><summary>More</summary>${dl(more)}</details>`;
 
   const show = {
     band: true,
@@ -851,16 +919,19 @@ function renderInfo(e) {
     greatest: true,
   };
   for (const li of $('legend').children) li.hidden = !show[li.dataset.key];
+  const marks = $('legend').querySelector('[data-key="marks"]');
+  if (marks) {
+    marks.lastChild.textContent = `Shadow centre, 30 min ${timeLabel()}`;
+  }
 }
 
 function noteFor(e) {
   if (!e.hasPath) {
-    return 'The Moon’s umbra misses the Earth, so there is no path of totality — '
+    return 'The Moon\u2019s umbra misses the Earth, so there is no path of totality \u2014 '
       + 'only the region where a partial eclipse is visible.';
   }
   if (e.type === 'hybrid') {
-    return 'Hybrid: the eclipse changes between annular and total along the path, '
-      + 'as the Earth’s curvature carries the surface in and out of the umbra. '
+    return 'Hybrid: the eclipse changes between annular and total along the path. '
       + 'Each leg is drawn in its own colour.';
   }
   return null;
@@ -933,6 +1004,18 @@ function buildSettings() {
   chips($('set-basemap'), BASEMAPS.map((b) => [b.id, b.label]),
         () => s.basemap, (id) => { s.basemap = id; saveSettings(); applyBasemap(); });
 
+  chips($('set-times'), [['local', `Yours (${LOCAL_ZONE})`], ['ut', 'UT']],
+        () => s.times, (v) => {
+          s.times = v;
+          saveSettings();
+          if (state.current) {
+            renderInfo(state.current);
+            const fc = geoCache.get(state.current.id);
+            if (fc) setMapData(fc);
+          }
+          closePopup();
+        });
+
   chips($('set-mode'), [['gradient', 'Gradient'], ['bands', 'Bands'], ['off', 'None']],
         () => s.mode, (mode) => { s.mode = mode; saveSettings(); applyShading(); shadingOnly(); });
 
@@ -998,35 +1081,6 @@ function shadingOnly() {
     el.style.opacity = on ? '' : '.4';
     for (const input of el.querySelectorAll('input, button')) input.disabled = !on;
   }
-}
-
-/**
- * Ask the browser where we are. The prompt itself gives no reason, so say why
- * first; and the answer is used in this tab and nothing else -- no request
- * carries it, and it is not written to storage.
- */
-function useMyLocation() {
-  const btn = $('place-locate');
-  if (!navigator.geolocation) {
-    btn.textContent = 'Location unavailable';
-    return;
-  }
-  btn.disabled = true;
-  btn.textContent = 'Asking…';
-  navigator.geolocation.getCurrentPosition(
-    ({ coords }) => {
-      btn.disabled = false;
-      btn.textContent = 'Use my location';
-      setPin({ lat: coords.latitude, lng: coords.longitude });
-      map.flyTo({ center: [coords.longitude, coords.latitude], zoom: 4, duration: 900 });
-    },
-    (err) => {
-      btn.disabled = false;
-      btn.textContent = err.code === err.PERMISSION_DENIED
-        ? 'Permission denied' : 'Could not locate you';
-    },
-    { enableHighAccuracy: false, timeout: 10000, maximumAge: 600000 },
-  );
 }
 
 // ------------------------------------------------------------------ chrome
@@ -1130,7 +1184,6 @@ async function boot() {
     if (b) select(b.dataset.id);
   });
   $('place-clear').addEventListener('click', () => setPin(null));
-  $('place-locate').addEventListener('click', useMyLocation);
   $('search').addEventListener('input', (ev) => {
     state.query = ev.target.value;
     applyFilters();

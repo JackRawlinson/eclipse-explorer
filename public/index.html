@@ -32,14 +32,11 @@
 
   <div class="panel__body">
     <div class="picker">
-      <div class="pinbar" id="pinbar">
-        <button type="button" class="pinbar__use" id="place-locate">Use my location</button>
-        <span class="pinbar__at" id="pinbar-at" hidden></span>
-        <button type="button" class="pinbar__clear" id="place-clear" hidden
+      <div class="pinbar" id="pinbar" hidden>
+        <span class="pinbar__at" id="pinbar-at"></span>
+        <button type="button" class="pinbar__clear" id="place-clear"
                 title="Stop filtering by place">×</button>
       </div>
-      <p class="place__why" id="place-why">Or click the map. Your position is used in
-        this tab only — never sent anywhere, never saved.</p>
       <div class="chips chips--tight" id="place-threshold" hidden
            role="group" aria-label="How much of the Sun must be covered"></div>
 
@@ -119,6 +116,11 @@
       <input type="color" id="set-tint">
       <div class="swatches" id="set-tint-swatches"></div>
     </div>
+
+    <fieldset class="field">
+      <legend>Times</legend>
+      <div class="chips chips--tight" id="set-times"></div>
+    </fieldset>
 
     <fieldset class="field">
       <legend>Paths</legend>
