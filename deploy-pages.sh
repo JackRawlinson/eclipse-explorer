@@ -80,9 +80,16 @@ sample_paths() {
     | sed 's|^|/eclipse/|; s|$|/|'
 }
 
+# Every request carries a query nobody has asked for before, so none of them can
+# be answered from the CDN's cache. Without that this measures the cache rather
+# than the deployment: a checkout of the site can report every path healthy
+# while the deployment behind it serves nothing, because the edge still holds
+# what the last good one gave it. That is exactly what happened -- 454 paths
+# reported as served, all of them cache, none of them there.
 check_site() {
+  BUST="cb=$(date +%s)$$"
   sample_paths | xargs -P 4 -I@ sh -c \
-    "printf '%s %s\\n' '@' \"\$(curl -sS -o /dev/null -w '%{http_code}' '$SITE@')\"" \
+    "printf '%s %s\\n' '@' \"\$(curl -sS -o /dev/null -w '%{http_code}' '$SITE@?$BUST')\"" \
     > "$REPORT" 2>&1
   awk '$2 != 200' "$REPORT" | wc -l
 }
