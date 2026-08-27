@@ -76,6 +76,9 @@ SITE="${CF_PAGES_SITE:-https://eclipse.tsbf.uk}"
 sample_paths() {
   printf '%s\n' / /app.js /style.css /circumstances.js /data/index.json \
                  /data/elements.json /robots.txt
+  # Google re-fetches this to keep Search Console verification alive. Checked at
+  # its clean URL: Pages 308s the .html form, so only this one answers 200.
+  printf '%s\n' /google0da65756c7365876
   ls public/data/*.geojson | xargs -n1 basename | sed 's/\.geojson//' \
     | shuf -n 25 | sed 's|^|/data/|; s|$|.geojson|'
   ls public/data/*.png | xargs -n1 basename | sed 's/\.png//' \
