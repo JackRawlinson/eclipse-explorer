@@ -691,7 +691,11 @@ body.has-timeline .place { bottom: 6.4rem; }
 /* display:grid above would otherwise win over the attribute */
 .timeline__play[hidden] { display: none; }
 /* the stop button is the way back, not the main action */
-#tl-stop { background: var(--panel-2, #e2e8f0); color: var(--ink, #0f172a); }
+#tl-stop {
+  background: var(--bg-sunk);
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
 
 /* The track is drawn by hand so it can carry the pin's marks: the stretch of
    the crossing that place actually sees, painted into --tl-marks as a gradient

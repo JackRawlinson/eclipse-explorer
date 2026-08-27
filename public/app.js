@@ -926,8 +926,9 @@ function startPlaying() {
   const tick = (now) => {
     if (!state.playing) return;
     if (last !== null) {
-      // the whole crossing takes about twelve seconds at 1x, whatever its real length
-      const step = ((now - last) / 12000) * state.playRate;
+      // the whole crossing takes about twenty-four seconds at 1x, whatever its
+      // real length -- the twelve it used to take turned out to be a sprint
+      const step = ((now - last) / 24000) * state.playRate;
       let v = Number($('tl-scrub').value) / 1000 + step;
       if (v > 1) v = 0;
       $('tl-scrub').value = String(Math.round(v * 1000));
