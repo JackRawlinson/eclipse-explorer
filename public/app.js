@@ -1342,6 +1342,10 @@ const hoursOf = (text) => {
   return h + m / 60 + sec / 3600;
 };
 
+const htmlEscape = (s) => String(s)
+  .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+  .replaceAll('"', '&quot;');
+
 // ------------------------------------------------------------------ data
 
 /** Data URLs carry the build stamp, so a rebuild is never served from cache. */
@@ -1609,7 +1613,41 @@ function renderInfo(e) {
     dl(pairs, 'facts--pairs')
     + dl(wide)
     + (note ? `<p class="facts__note">${note}</p>` : '')
-    + `<details class="facts__more"><summary>More</summary>${dl(more)}</details>`;
+    + `<details class="facts__more"><summary>More</summary>${dl(more)}</details>`
+    + '<div id="facts-cities"></div>';
+  renderCities(e);
+}
+
+// The cities standing in the path, precomputed by the pipeline into one file
+// for all eclipses. Clicking one pins it, so the card, the corner disc and the
+// timeline marks all snap to that city.
+let cityTimes = null;
+
+async function renderCities(e) {
+  const host = $('facts-cities');
+  if (!host || !e.hasPath) return;
+  if (!cityTimes) {
+    try {
+      cityTimes = await fetch(dataUrl('cities.json')).then((r) => {
+        if (!r.ok) throw new Error(`cities.json: ${r.status}`);
+        return r.json();
+      });
+    } catch { return; }                        // the panel stands without it
+  }
+  if (state.current?.id !== e.id || !host.isConnected) return;
+  const rows = cityTimes[e.id];
+  if (!rows?.length) return;
+  const noun = e.type === 'total' ? 'Totality'
+    : e.type === 'annular' ? 'Annularity' : 'Central phase';
+  const ref = hoursOf(rows[0].from);
+  const line = (r) =>
+    `<li><button type="button" class="pop__link" data-city="${r.lat},${r.lon}"
+       title="Pin ${htmlEscape(r.name)} on the map">${htmlEscape(r.name)},
+       ${htmlEscape(r.country)}</button>
+     <span class="facts__citytime">${clock(e.date, hoursOf(r.from), { seconds: true, reference: ref })}
+       ${timeLabel()} · ${formatDuration(r.durationS)}</span></li>`;
+  host.innerHTML = `<h3 class="facts__cities-title">${noun}, city by city</h3>`
+    + `<ul class="facts__cities">${rows.map(line).join('')}</ul>`;
 
   const show = {
     band: true,
@@ -1965,6 +2003,12 @@ async function boot() {
   $('place-body')?.addEventListener('click', (ev) => {
     const id = ev.target?.dataset?.next;
     if (id) select(id);
+  });
+  $('facts')?.addEventListener('click', (ev) => {
+    const city = ev.target.closest?.('[data-city]')?.dataset.city;
+    if (!city) return;
+    const [lat, lon] = city.split(',').map(Number);
+    setPin({ lat, lng: lon });
   });
   $('search').addEventListener('input', (ev) => {
     state.query = ev.target.value;

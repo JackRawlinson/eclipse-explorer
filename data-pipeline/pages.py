@@ -220,7 +220,23 @@ def _shell(title, desc, canonical, body, image=None):
 """
 
 
-def render_eclipse(template, entry, base_url):
+def _city_table(entry, rows):
+    if not rows:
+        return ""
+    noun = {"total": "Totality", "annular": "Annularity"}.get(
+        entry["type"], "Central phase")
+    body = "".join(
+        f'<tr><td>{html.escape(r["name"])}, {html.escape(r["country"])}</td>'
+        f'<td>{r["from"]}\u2013{r["to"]} UT</td>'
+        f'<td>{duration(r["durationS"])}</td></tr>'
+        for r in rows)
+    return (f'<h2 class="facts__cities-title">In the path</h2>'
+            f'<table class="facts__cities">'
+            f'<thead><tr><th>City</th><th>{noun}</th><th>Lasts</th></tr></thead>'
+            f'<tbody>{body}</tbody></table>')
+
+
+def render_eclipse(template, entry, base_url, cities=None):
     """The app, with this eclipse's identity and facts written into it."""
     import re
     title = title_for(entry)
@@ -262,7 +278,7 @@ def render_eclipse(template, entry, base_url):
     page = page.replace(
         '<div id="facts"></div>',
         f'<div id="facts"><p class="facts__note">{html.escape(desc)}</p>'
-        f'<dl class="facts">{facts}</dl></div>', 1)
+        f'<dl class="facts">{facts}</dl>{_city_table(entry, cities)}</div>', 1)
     return page
 
 
@@ -339,16 +355,30 @@ def render_sitemap(entries, base_url):
             f"{body}</urlset>")
 
 
+def _city_times(public_dir):
+    """The per-city table data, computed by cities.py in the pipeline stage.
+    Falling back to building it here keeps a fresh checkout honest, at the
+    price of a couple of minutes."""
+    path = os.path.join(public_dir, "data", "cities.json")
+    if os.path.exists(path):
+        with open(path) as fh:
+            return json.load(fh)
+    import cities
+    return cities.build()
+
+
 def write_all(entries, public_dir, base_url):
     """Every leaf page, the year and list pages, and the sitemap."""
     with open(os.path.join(public_dir, "index.html")) as fh:
         template = fh.read()
+    city_times = _city_times(public_dir)
     ordered = sorted(entries, key=lambda e: e["date"])
     for entry in ordered:
         directory = os.path.join(public_dir, "eclipse", slug(entry))
         os.makedirs(directory, exist_ok=True)
         with open(os.path.join(directory, "index.html"), "w") as fh:
-            fh.write(render_eclipse(template, entry, base_url))
+            fh.write(render_eclipse(template, entry, base_url,
+                                    city_times.get(entry["id"])))
 
     by_year = {}
     for entry in ordered:

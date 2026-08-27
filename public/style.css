@@ -143,6 +143,29 @@ body.has-timeline .place { bottom: 6.4rem; }
 }
 .pop__link:hover { text-decoration-style: solid; }
 
+/* The city-by-city rows in the details panel. Each city is a button that pins
+   it, so the row doubles as a way into the card and the corner disc. */
+.facts__cities-title {
+  margin: .8rem 0 .25rem;
+  font-size: .72rem; font-weight: 600;
+  letter-spacing: .04em; text-transform: uppercase;
+  color: var(--ink-dim);
+}
+ul.facts__cities {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; gap: .18rem;
+  font-size: .8rem;
+}
+ul.facts__cities li {
+  display: flex; justify-content: space-between; gap: .6rem;
+  align-items: baseline;
+}
+.facts__citytime {
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 /* Word from a button press: floats above the timeline, minds its own business. */
 .toast {
   position: absolute;

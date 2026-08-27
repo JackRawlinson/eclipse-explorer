@@ -423,6 +423,11 @@ def main(only=None):
     print(f"done: {len(index)} eclipses, {total_bytes / 1024 / 1024:.1f} MB total, "
           f"{time.time() - started:.0f}s")
 
+    # The cities in each path, from the geometry just written. Built here, in
+    # the slow cached stage, so page stamping never has to pay for it.
+    import cities
+    cities.build()
+
 
 if __name__ == "__main__":
     main(sys.argv[1] if len(sys.argv) > 1 else None)
