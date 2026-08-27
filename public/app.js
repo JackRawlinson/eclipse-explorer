@@ -117,6 +117,12 @@ const state = {
   shadowWindow: null,   // when the umbra is on the Earth, for the timeline
   playing: false,
   playTimer: null,
+  playRate: (() => {
+    try {
+      const v = Number(localStorage.getItem('eclipse-mapper.speed'));
+      return [0.5, 1, 2, 4].includes(v) ? v : 1;
+    } catch { return 1; }
+  })(),
   live: false,          // the timeline is showing one instant, not the whole eclipse
   liveT: null,          // that instant, for the view-from-the-pin disc
   pin: null,            // a place to ask "what is visible from here?"
@@ -563,12 +569,61 @@ function showTimeline(entry) {
   $('timeline').hidden = !state.shadowWindow;
   // The sheet needs to know to leave room for it; see the mobile rule.
   document.body.classList.toggle('has-timeline', !!state.shadowWindow);
+  updateScrubMarks();
   if (!state.shadowWindow) {
     setShadow(null);
     return;
   }
   $('tl-scrub').value = '0';
   setShadowAt(0, false);
+}
+
+/**
+ * Paint the pinned place's share of the crossing onto the scrub track: its
+ * partial phase as a wash, totality or annularity at full strength. The local
+ * partial phase usually starts before the umbra touches the Earth at all, so
+ * the ends clamp to the bar rather than hang off it.
+ */
+function updateScrubMarks() {
+  const input = $('tl-scrub');
+  if (!input) return;
+  const win = state.shadowWindow;
+  let r = null;
+  if (win && state.pin && state.elements) {
+    r = localCircumstances(state.elements, state.pin.lat, state.pin.lon);
+  }
+  if (!r) {
+    input.style.removeProperty('--tl-marks');
+    return;
+  }
+  const f = (t) => Math.min(100, Math.max(0, ((t - win[0]) / (win[1] - win[0])) * 100));
+  // A missing contact means that edge of the eclipse falls outside the window:
+  // it is already under way when the crossing starts, or still going at the end.
+  const p0 = f(r.c1 ?? win[0]);
+  const p1 = f(r.c4 ?? win[1]);
+  if (p1 - p0 < 0.5) {
+    input.style.removeProperty('--tl-marks');
+    return;
+  }
+  const wash = 'color-mix(in srgb, var(--accent) 35%, var(--line))';
+  const stops = [`var(--line) 0% ${p0}%`];
+  if (r.c2 !== undefined && r.c3 !== undefined) {
+    let q0 = f(r.c2);
+    let q1 = f(r.c3);
+    // totality is minutes inside a crossing of hours; keep its mark visible
+    if (q1 - q0 < 1.4) {
+      const mid = (q0 + q1) / 2;
+      q0 = Math.max(p0, mid - 0.7);
+      q1 = Math.min(p1, mid + 0.7);
+    }
+    stops.push(`${wash} ${p0}% ${q0}%`,
+               `var(--accent) ${q0}% ${q1}%`,
+               `${wash} ${q1}% ${p1}%`);
+  } else {
+    stops.push(`${wash} ${p0}% ${p1}%`);
+  }
+  stops.push(`var(--line) ${p1}% 100%`);
+  input.style.setProperty('--tl-marks', `linear-gradient(to right, ${stops.join(', ')})`);
 }
 
 /**
@@ -871,8 +926,8 @@ function startPlaying() {
   const tick = (now) => {
     if (!state.playing) return;
     if (last !== null) {
-      // the whole crossing takes about twelve seconds, whatever its real length
-      const step = (now - last) / 12000;
+      // the whole crossing takes about twelve seconds at 1x, whatever its real length
+      const step = ((now - last) / 12000) * state.playRate;
       let v = Number($('tl-scrub').value) / 1000 + step;
       if (v > 1) v = 0;
       $('tl-scrub').value = String(Math.round(v * 1000));
@@ -932,6 +987,7 @@ function setPin(lngLat, { push = true } = {}) {
   drawPin();
   updateEye();
   renderPlace();
+  updateScrubMarks();
   if (push) syncUrl();
   if (!state.pin) {
     if (state.visible) clearVisible();
@@ -1683,6 +1739,15 @@ async function boot() {
   $('place-clear').addEventListener('click', () => setPin(null));
   $('place-close').addEventListener('click', () => setPin(null));
   $('place-visible').addEventListener('click', showVisibleFromPin);
+  const speedLabel = () => `${state.playRate === 0.5 ? '½' : state.playRate}×`;
+  $('tl-speed').textContent = speedLabel();
+  $('tl-speed').addEventListener('click', () => {
+    const speeds = [0.5, 1, 2, 4];
+    state.playRate = speeds[(speeds.indexOf(state.playRate) + 1) % speeds.length];
+    $('tl-speed').textContent = speedLabel();
+    try { localStorage.setItem('eclipse-mapper.speed', String(state.playRate)); }
+    catch { /* private mode; the choice just will not stick */ }
+  });
   $('tl-scrub').addEventListener('input', (ev) => {
     stopPlaying();
     setShadowAt(Number(ev.target.value) / 1000);

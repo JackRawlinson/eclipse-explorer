@@ -693,7 +693,45 @@ body.has-timeline .place { bottom: 6.4rem; }
 /* the stop button is the way back, not the main action */
 #tl-stop { background: var(--panel-2, #e2e8f0); color: var(--ink, #0f172a); }
 
-.timeline input[type="range"] { flex: 1; min-width: 0; accent-color: var(--accent); }
+/* The track is drawn by hand so it can carry the pin's marks: the stretch of
+   the crossing that place actually sees, painted into --tl-marks as a gradient
+   (partial phase in a wash, totality in full accent). No pin, plain track. */
+.timeline input[type="range"] {
+  flex: 1; min-width: 0;
+  -webkit-appearance: none; appearance: none;
+  height: 18px; margin: 0; padding: 0;
+  background: transparent; cursor: pointer;
+}
+.timeline input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px; border-radius: 3px;
+  background: var(--tl-marks, var(--line));
+}
+.timeline input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 14px; height: 14px; margin-top: -4px;
+  border-radius: 50%; background: var(--accent);
+  border: 2px solid var(--bg);
+}
+.timeline input[type="range"]::-moz-range-track {
+  height: 6px; border-radius: 3px;
+  background: var(--tl-marks, var(--line));
+}
+.timeline input[type="range"]::-moz-range-thumb {
+  width: 10px; height: 10px;
+  border-radius: 50%; background: var(--accent);
+  border: 2px solid var(--bg);
+}
+
+.timeline__speed {
+  flex: none; min-width: 2.1rem;
+  padding: .16rem .35rem;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: var(--bg); color: var(--ink-dim);
+  font: inherit; font-size: .72rem; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.timeline__speed:hover { border-color: var(--ink-dim); color: var(--ink); }
 
 .timeline__time {
   flex: none; min-width: 6.2rem; text-align: right;
