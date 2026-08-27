@@ -1738,17 +1738,23 @@ async function boot() {
     if (b) select(b.dataset.id);
   });
   $('place-clear').addEventListener('click', () => setPin(null));
-  $('place-close').addEventListener('click', () => setPin(null));
-  $('place-visible').addEventListener('click', showVisibleFromPin);
+  // Optional chaining on the newer controls: a cached page can be one deploy
+  // older than this script, and a missing button must cost that button alone,
+  // not every listener wired after the line that would have thrown.
+  $('place-close')?.addEventListener('click', () => setPin(null));
+  $('place-visible')?.addEventListener('click', showVisibleFromPin);
   const speedLabel = () => `${state.playRate === 0.5 ? '½' : state.playRate}×`;
-  $('tl-speed').textContent = speedLabel();
-  $('tl-speed').addEventListener('click', () => {
-    const speeds = [0.5, 1, 2, 4];
-    state.playRate = speeds[(speeds.indexOf(state.playRate) + 1) % speeds.length];
-    $('tl-speed').textContent = speedLabel();
-    try { localStorage.setItem('eclipse-mapper.speed', String(state.playRate)); }
-    catch { /* private mode; the choice just will not stick */ }
-  });
+  const speedBtn = $('tl-speed');
+  if (speedBtn) {
+    speedBtn.textContent = speedLabel();
+    speedBtn.addEventListener('click', () => {
+      const speeds = [0.5, 1, 2, 4];
+      state.playRate = speeds[(speeds.indexOf(state.playRate) + 1) % speeds.length];
+      speedBtn.textContent = speedLabel();
+      try { localStorage.setItem('eclipse-mapper.speed', String(state.playRate)); }
+      catch { /* private mode; the choice just will not stick */ }
+    });
+  }
   $('tl-scrub').addEventListener('input', (ev) => {
     stopPlaying();
     setShadowAt(Number(ev.target.value) / 1000);
