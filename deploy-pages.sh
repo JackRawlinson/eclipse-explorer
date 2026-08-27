@@ -83,9 +83,11 @@ sample_paths() {
     | shuf -n 25 | sed 's|^|/data/|; s|$|.geojson|'
   ls public/data/*.png | xargs -n1 basename | sed 's/\.png//' \
     | shuf -n 10 | sed 's|^|/data/|; s|$|.png|'
-  printf '%s\n' /eclipse/ /sitemap.xml
+  printf '%s\n' /eclipse/ /lunar/ /sitemap.xml /data/lunar.json
   ls -d public/eclipse/*-*/ | xargs -n1 basename | shuf -n 10 \
     | sed 's|^|/eclipse/|; s|$|/|'
+  ls -d public/lunar/*-*/ | xargs -n1 basename | shuf -n 6 \
+    | sed 's|^|/lunar/|; s|$|/|'
   ls -d public/eclipse/[0-9][0-9][0-9][0-9]/ | xargs -n1 basename | shuf -n 5 \
     | sed 's|^|/eclipse/|; s|$|/|'
   ls public/preview/*.png | xargs -n1 basename | shuf -n 8 | sed 's|^|/preview/|'
