@@ -565,7 +565,13 @@ function showTimeline(entry) {
   stopPlaying();
   setLive(false);
   const el = state.elements;
-  state.shadowWindow = entry.hasPath ? umbralWindow(el) : null;
+  const win = entry.hasPath ? umbralWindow(el) : null;
+  // A little room either side of the strict crossing: totality at a place near
+  // the path's end otherwise lands in the last sliver of the bar, and the
+  // shadow gets to arrive and leave instead of starting mid-map.
+  state.shadowWindow = win
+    ? [win[0] - (win[1] - win[0]) * 0.05, win[1] + (win[1] - win[0]) * 0.05]
+    : null;
   $('timeline').hidden = !state.shadowWindow;
   // The sheet needs to know to leave room for it; see the mobile rule.
   document.body.classList.toggle('has-timeline', !!state.shadowWindow);
