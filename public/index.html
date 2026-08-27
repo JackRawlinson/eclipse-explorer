@@ -115,6 +115,16 @@
   <div class="eye__label" id="eye-label"></div>
 </div>
 
+<!-- The picked place: the facts the popup used to float over the map, docked
+     where they do not sit on top of the animation. -->
+<aside class="place" id="place" hidden aria-label="The picked place">
+  <button type="button" class="place__close" id="place-close"
+          aria-label="Clear the picked place">×</button>
+  <div id="place-body"></div>
+  <p class="pop__actions"><button type="button" class="pop__action"
+     id="place-visible">Show eclipses visible from here</button></p>
+</aside>
+
 <dialog class="intro" id="intro">
   <h2>Solar eclipses, 1900&ndash;2100</h2>
   <p class="intro__lead">Every solar eclipse for two centuries, each one drawn on

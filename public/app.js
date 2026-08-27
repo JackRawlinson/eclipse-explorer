@@ -137,7 +137,6 @@ let shadingUrl = null;
 let layersReady = false;   // our layers exist and can be added to
 let loadToken = 0;
 let map;
-let popup = null;
 
 // ------------------------------------------------------------------- map
 
@@ -175,7 +174,9 @@ function buildMap() {
   // without this a bad layer definition just silently draws nothing.
   map.on('error', (ev) => console.error('map error:', ev?.error?.message || ev));
 
-  map.on('click', (ev) => showCircumstances(ev.lngLat));
+  // One click does everything: the pin drops, the card fills in, and if the
+  // shadow is running the corner disc follows the new place on the next frame.
+  map.on('click', (ev) => setPin(ev.lngLat));
   map.on('mouseout', () => { map.getCanvas().style.cursor = ''; });
   map.getCanvas().style.cursor = 'crosshair';
 
@@ -921,23 +922,36 @@ async function elementsForAll() {
   return allElements;
 }
 
+/**
+ * The picked place. Setting it drops the marker, fills the card and feeds the
+ * corner disc; it does NOT filter the list -- that is opted into with the
+ * card's button, though once opted in the filter follows the pin around.
+ */
 function setPin(lngLat, { push = true } = {}) {
   state.pin = lngLat ? { lat: lngLat.lat, lon: lngLat.lng ?? lngLat.lon } : null;
   drawPin();
   updateEye();
+  renderPlace();
   if (push) syncUrl();
-  const bar = $('pinbar');
-  const chips = $('place-threshold');
   if (!state.pin) {
-    state.visible = null;
-    bar.hidden = true;
-    chips.hidden = true;
-    applyFilters();
+    if (state.visible) clearVisible();
     return;
   }
+  if (state.visible) showVisibleFromPin();
+}
+
+function clearVisible() {
+  state.visible = null;
+  $('pinbar').hidden = true;
+  $('place-threshold').hidden = true;
+  applyFilters();
+}
+
+function showVisibleFromPin() {
+  if (!state.pin) return;
   $('pinbar-at').textContent = `From ${formatLatLon(state.pin.lat, state.pin.lon, 2)}`;
-  bar.hidden = false;
-  chips.hidden = false;
+  $('pinbar').hidden = false;
+  $('place-threshold').hidden = false;
   computeVisible();
 }
 
@@ -1005,20 +1019,17 @@ function buildThresholds() {
 
 // ------------------------------------------------- what you would see there
 
-function closePopup() {
-  if (popup) { popup.remove(); popup = null; }
-}
-
-function showCircumstances(lngLat) {
-  if (!state.elements) return;
-  closePopup();
-  const seen = localCircumstances(state.elements, lngLat.lat, lngLat.lng);
-  popup = new maplibregl.Popup({ closeButton: true, maxWidth: '17rem' })
-    .setLngLat(lngLat)
-    .setHTML(circumstancesHTML(seen, lngLat))
-    .addTo(map);
-  popup.getElement().querySelector('[data-act="pin"]')
-    ?.addEventListener('click', () => { setPin(lngLat); closePopup(); });
+/** The card for the picked place: re-rendered whenever the place, the eclipse
+    or the time format changes, so it can never show a stale reading. */
+function renderPlace() {
+  const card = $('place');
+  if (!card) return;
+  if (!state.pin) { card.hidden = true; return; }
+  const lngLat = { lat: state.pin.lat, lng: state.pin.lon };
+  $('place-body').innerHTML = state.elements
+    ? circumstancesHTML(localCircumstances(state.elements, lngLat.lat, lngLat.lng), lngLat)
+    : `<p class="pop__where">${formatLatLon(lngLat.lat, lngLat.lng, 3)}</p>`;
+  card.hidden = false;
 }
 
 function circumstancesHTML(s, lngLat) {
@@ -1026,9 +1037,7 @@ function circumstancesHTML(s, lngLat) {
   if (!s) {
     return `<p class="pop__head pop__head--none">No eclipse here</p>
             <p class="pop__note">The Sun is either untouched or below the horizon
-            throughout.</p>${where}
-            <p class="pop__actions"><button type="button" class="pop__action"
-            data-act="pin">Show eclipses visible from here</button></p>`;
+            throughout.</p>${where}`;
   }
 
   const el = state.elements;
@@ -1064,9 +1073,7 @@ function circumstancesHTML(s, lngLat) {
     + rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')
     + '</dl>'
     + (notes.length ? `<p class="pop__note">${notes.join('; ')}.</p>` : '')
-    + where
-    + '<p class="pop__actions"><button type="button" class="pop__action" '
-    + 'data-act="pin">Show eclipses visible from here</button></p>';
+    + where;
 }
 
 const LOCAL_ZONE = (() => {
@@ -1166,7 +1173,7 @@ async function select(id, { fit = true, push = true, replace = false } = {}) {
     const fc = await loadGeometry(id);
     if (token !== loadToken) return;
     state.elements = fc.properties?.elements || null;
-    closePopup();
+    renderPlace();
     setMapData(fc);
     setShading(entry);
     showTimeline(entry);
@@ -1467,7 +1474,7 @@ function buildSettings() {
             const fc = geoCache.get(state.current.id);
             if (fc) setMapData(fc);
           }
-          closePopup();
+          renderPlace();
         });
 
   chips($('set-mode'), [['gradient', 'Gradient'], ['bands', 'Bands'], ['off', 'None']],
@@ -1674,6 +1681,8 @@ async function boot() {
     if (b) select(b.dataset.id);
   });
   $('place-clear').addEventListener('click', () => setPin(null));
+  $('place-close').addEventListener('click', () => setPin(null));
+  $('place-visible').addEventListener('click', showVisibleFromPin);
   $('tl-scrub').addEventListener('input', (ev) => {
     stopPlaying();
     setShadowAt(Number(ev.target.value) / 1000);
