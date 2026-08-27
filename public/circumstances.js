@@ -482,6 +482,11 @@ export function localInstant(el, lat, lon, t) {
   const sep = Math.hypot(east, north);
   return {
     up: o.zeta >= -HORIZON_TOL,
+    altitude: Math.asin(Math.min(1, Math.max(-1, o.zeta))) / DEG,
+    // The observer's zenith, seen in the plane of the view: the transverse
+    // part of their position vector. Gives the horizon its true tilt.
+    zenithEast: o.xi,
+    zenithNorth: o.eta,
     ratio: (l1p - l2p) / (l1p + l2p),      // Moon diameter over Sun diameter
     separation: 2 * sep / (l1p + l2p),     // centre to centre, in Sun radii
     east,

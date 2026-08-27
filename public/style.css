@@ -103,6 +103,7 @@ html, body {
   font-variant-numeric: tabular-nums;
 }
 .eye__label:empty { display: none; }
+.eye__label--time { font-weight: 500; font-size: .68rem; color: var(--ink-dim); }
 .eye[hidden] { display: none; }   /* display:grid above would beat the UA rule */
 @media (max-width: 46rem), (max-height: 34rem) {
   .eye canvas { width: 5.5rem; height: 5.5rem; }

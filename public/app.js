@@ -671,9 +671,13 @@ function setShadowAt(fraction, showing = true) {
   setLive(showing);
 
   const date = state.current?.date;
-  $('tl-time').textContent = date
+  const readout = date
     ? `${clock(date, toUT(el, t), { seconds: true, reference: toUT(el, (win[0] + win[1]) / 2) })} ${timeLabel()}`
     : '';
+  $('tl-time').textContent = readout;
+  // The corner disc carries the same clock, so watching it means watching it all.
+  const eyeTime = $('eye-time');
+  if (eyeTime) eyeTime.textContent = $('eye')?.hidden ? '' : readout;
 }
 
 function setShadow(fc) {
@@ -737,65 +741,93 @@ function updateEye() {
   ctx.arc(cx, cy, edge, 0, 2 * Math.PI);
   ctx.clip();
 
-  let label = '';
-  if (!v.up) {
-    ctx.fillStyle = '#070b14';
+  const c = Math.max(v.ratio, 1e-3);
+  const o = obscurationFrom(v.magnitude, c);
+  const total = v.separation <= c - 1;
+  const annular = c < 1 && v.separation <= 1 - c;
+  const alt = v.altitude;
+
+  // Daylight holds until nearly the end, then goes all at once -- the fourth
+  // power is the same judgement the map's live shading makes. Twilight pulls
+  // the same lever: whichever has taken more of the light wins.
+  const twilight = Math.min(1, Math.max(0, (2 - alt) / 10));
+  const k = total ? 1 : Math.max(Math.min(1, o ** 4), twilight);
+  const mix = (i) => Math.round(EYE_DAY[i] + (EYE_DUSK[i] - EYE_DAY[i]) * k);
+  ctx.fillStyle = `rgb(${mix(0)},${mix(1)},${mix(2)})`;
+  ctx.fillRect(0, 0, size, size);
+
+  // The Sun fills a third of the disc, so first and last contact fall just
+  // inside the rim and the Moon slides in through it rather than popping up.
+  const R = edge * 0.34;
+  if (!total && v.up) {
+    const glare = ctx.createRadialGradient(cx, cy, R * 0.5, cx, cy, R * 2.4);
+    glare.addColorStop(0, 'rgba(255,244,214,.5)');
+    glare.addColorStop(1, 'rgba(255,244,214,0)');
+    ctx.fillStyle = glare;
     ctx.fillRect(0, 0, size, size);
-    label = 'Sun below the horizon';
-  } else {
-    const c = Math.max(v.ratio, 1e-3);
-    const o = obscurationFrom(v.magnitude, c);
-    const total = v.separation <= c - 1;
-    const annular = c < 1 && v.separation <= 1 - c;
-
-    // Daylight holds until nearly the end, then goes all at once -- the fourth
-    // power is the same judgement the map's live shading makes.
-    const k = total ? 1 : Math.min(1, o ** 4);
-    const mix = (i) => Math.round(EYE_DAY[i] + (EYE_DUSK[i] - EYE_DAY[i]) * k);
-    ctx.fillStyle = `rgb(${mix(0)},${mix(1)},${mix(2)})`;
-    ctx.fillRect(0, 0, size, size);
-
-    // The Sun fills a third of the disc, so first and last contact fall just
-    // inside the rim and the Moon slides in through it rather than popping up.
-    const R = edge * 0.34;
-    if (!total) {
-      const glare = ctx.createRadialGradient(cx, cy, R * 0.5, cx, cy, R * 2.4);
-      glare.addColorStop(0, 'rgba(255,244,214,.5)');
-      glare.addColorStop(1, 'rgba(255,244,214,0)');
-      ctx.fillStyle = glare;
-      ctx.fillRect(0, 0, size, size);
-    }
-    const sun = ctx.createRadialGradient(cx - R * 0.2, cy - R * 0.2, R * 0.2, cx, cy, R);
-    sun.addColorStop(0, '#fff8dc');
-    sun.addColorStop(1, '#fbbf24');
-    ctx.fillStyle = sun;
-    ctx.beginPath();
-    ctx.arc(cx, cy, R, 0, 2 * Math.PI);
-    ctx.fill();
-
-    // Canvas y runs down and a sky chart puts east on the left, so both axes flip.
-    const d = Math.hypot(v.east, v.north) || 1;
-    const mx = cx - (v.east / d) * v.separation * R;
-    const my = cy - (v.north / d) * v.separation * R;
-    if (total) {
-      // the corona: the one sight the map itself cannot show
-      const halo = ctx.createRadialGradient(mx, my, R * c * 0.95, mx, my, R * c * 2);
-      halo.addColorStop(0, 'rgba(228,238,255,.95)');
-      halo.addColorStop(0.4, 'rgba(196,212,240,.35)');
-      halo.addColorStop(1, 'rgba(196,212,240,0)');
-      ctx.fillStyle = halo;
-      ctx.fillRect(0, 0, size, size);
-    }
-    ctx.fillStyle = '#0d1117';
-    ctx.beginPath();
-    ctx.arc(mx, my, R * c, 0, 2 * Math.PI);
-    ctx.fill();
-
-    label = total ? 'Totality'
-      : annular ? 'Annular'
-      : o >= 0.005 ? `${Math.round(o * 100)}% covered`
-      : '';
   }
+  const sun = ctx.createRadialGradient(cx - R * 0.2, cy - R * 0.2, R * 0.2, cx, cy, R);
+  sun.addColorStop(0, '#fff8dc');
+  sun.addColorStop(1, '#fbbf24');
+  ctx.fillStyle = sun;
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, 0, 2 * Math.PI);
+  ctx.fill();
+
+  // Canvas y runs down and a sky chart puts east on the left, so both axes flip.
+  const d = Math.hypot(v.east, v.north) || 1;
+  const mx = cx - (v.east / d) * v.separation * R;
+  const my = cy - (v.north / d) * v.separation * R;
+  if (total) {
+    // the corona: the one sight the map itself cannot show
+    const halo = ctx.createRadialGradient(mx, my, R * c * 0.95, mx, my, R * c * 2);
+    halo.addColorStop(0, 'rgba(228,238,255,.95)');
+    halo.addColorStop(0.4, 'rgba(196,212,240,.35)');
+    halo.addColorStop(1, 'rgba(196,212,240,0)');
+    ctx.fillStyle = halo;
+    ctx.fillRect(0, 0, size, size);
+  }
+  ctx.fillStyle = '#0d1117';
+  ctx.beginPath();
+  ctx.arc(mx, my, R * c, 0, 2 * Math.PI);
+  ctx.fill();
+
+  // The ground. The view is glued to the Sun, so it is the horizon that moves:
+  // as the Sun drops the ground climbs the disc and finally rides over it. The
+  // altitude scale is deliberately compressed -- to true scale the horizon
+  // would only enter this narrow a view for the last fraction of a degree --
+  // and its tilt is the real one, taken from where the zenith lies.
+  if (alt < 10) {
+    const zl = Math.hypot(v.zenithEast, v.zenithNorth);
+    const zx = zl > 1e-6 ? -v.zenithEast / zl : 0;   // zenith on the canvas
+    const zy = zl > 1e-6 ? -v.zenithNorth / zl : -1;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(Math.atan2(zx, -zy));
+    const yH = (alt / 10) * edge;
+    const ground = ctx.createLinearGradient(0, yH, 0, edge * 1.2);
+    ground.addColorStop(0, '#232d28');
+    ground.addColorStop(1, '#0c110e');
+    ctx.fillStyle = ground;
+    ctx.fillRect(-size, yH, 2 * size, 2 * size);
+    // the last light along the horizon, when the Sun is near it
+    const glow = Math.max(0, 1 - Math.abs(alt) / 6) * (1 - o * 0.85);
+    if (glow > 0.02) {
+      ctx.strokeStyle = `rgba(255,196,130,${(0.65 * glow).toFixed(3)})`;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(-size, yH);
+      ctx.lineTo(size, yH);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  const label = !v.up ? 'Sun below the horizon'
+    : total ? 'Totality'
+    : annular ? 'Annular'
+    : o >= 0.005 ? `${Math.round(o * 100)}% covered`
+    : '';
   ctx.restore();
 
   const caption = $('eye-label');
@@ -922,14 +954,17 @@ function startPlaying() {
   state.playing = true;
   $('tl-play').innerHTML = PAUSE_ICON;
   $('tl-play').setAttribute('aria-label', 'Pause the shadow');
+  // The position lives here as a float, not in the scrub bar: the bar holds
+  // integers, and at the slower speeds a frame's progress is a fraction of one
+  // unit -- read back and rounded each frame, it would never move at all.
+  let v = Number($('tl-scrub').value) / 1000;
   let last = null;
   const tick = (now) => {
     if (!state.playing) return;
     if (last !== null) {
       // the whole crossing takes about twenty-four seconds at 1x, whatever its
       // real length -- the twelve it used to take turned out to be a sprint
-      const step = ((now - last) / 24000) * state.playRate;
-      let v = Number($('tl-scrub').value) / 1000 + step;
+      v += ((now - last) / 24000) * state.playRate;
       if (v > 1) v = 0;
       $('tl-scrub').value = String(Math.round(v * 1000));
       setShadowAt(v);
