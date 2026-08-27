@@ -1,6 +1,7 @@
 import * as maplibregl from './vendor/maplibre-gl.mjs';
 import { localCircumstances, localInstant, obscurationFrom, toUT, shadowOutline,
          instantField, penumbraEdge, nightPolygon, terminator } from './circumstances.js';
+import * as lunar from './lunar.js';
 
 // OpenFreeMap's styles, quietest first. `dark` here means the paint palette and
 // the panels flip, not that the basemap is literally black.
@@ -106,6 +107,8 @@ const WORLD_CORNERS = [[-180, MERCATOR_LIMIT], [180, MERCATOR_LIMIT],
 const $ = (id) => document.getElementById(id);
 
 const state = {
+  kind: 'solar',        // which catalogue the app is showing: 'solar' | 'lunar'
+  lunarAll: null,       // the lunar catalogue, fetched on first use
   all: [],
   shown: [],
   current: null,
@@ -189,7 +192,9 @@ function buildMap() {
   map.on('style.load', () => {
     addEclipseLayers();
     applyPathColours();
-    if (state.current) {
+    if (state.kind === 'lunar') {
+      if (state.current) lunarShadowAt(Number($('tl-scrub').value) / 1000, state.live);
+    } else if (state.current) {
       setMapData(geoCache.get(state.current.id) || EMPTY);
       setShading(state.current);
     }
@@ -207,6 +212,9 @@ const ICONS = {
        + '<path d="M12 3c2.6 2.5 4 5.6 4 9s-1.4 6.5-4 9c-2.6-2.5-4-5.6-4-9s1.4-6.5 4-9z"/>',
   flat: '<rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="M3 10h18M9 5v14"/>',
   cog: '<circle cx="12" cy="12" r="3.1"/><path d="M19.4 14.5a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5v.2a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H2.8a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h.1A1.7 1.7 0 0 0 10 3.7v-.2a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.5 1h.2a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+  moon: '<path d="M20.2 14.2A8.7 8.7 0 0 1 9.8 3.8a8.7 8.7 0 1 0 10.4 10.4z"/>',
+  sun: '<circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.6M12 18.8v2.6M2.6 12h2.6'
+     + 'M18.8 12h2.6M5.2 5.2l1.9 1.9M16.9 16.9l1.9 1.9M18.8 5.2l-1.9 1.9M7.1 16.9l-1.9 1.9"/>',
   share: '<circle cx="17.5" cy="5.5" r="2.5"/><circle cx="6.5" cy="12" r="2.5"/>'
        + '<circle cx="17.5" cy="18.5" r="2.5"/><path d="M8.8 10.9l6.4-4.2M8.8 13.1l6.4 4.2"/>',
   calendar: '<rect x="3.5" y="5" width="17" height="15.5" rx="2"/>'
@@ -221,6 +229,9 @@ function buttonGroup() {
       div.append(
         mapButton('refit', 'Refit the map to this eclipse', () => fitToCurrent()),
         mapButton('globe', 'Switch between the flat map and a globe', toggleGlobe, 'globe'),
+        mapButton('moon', 'Switch between solar and lunar eclipses', () => {
+          setKind(state.kind === 'lunar' ? 'solar' : 'lunar');
+        }, 'kind'),
         mapButton('share', 'Copy a link to this view', shareView),
         mapButton('calendar', 'Save this eclipse to your calendar, for the picked place',
                   downloadCalendar),
@@ -538,6 +549,51 @@ function toggleGlobe() {
   state.globe = false;
 }
 
+// -------------------------------------------------------- solar or lunar
+
+async function lunarCatalogue() {
+  if (!state.lunarAll) {
+    const data = await fetch(dataUrl('lunar.json')).then((r) => {
+      if (!r.ok) throw new Error(`lunar.json: ${r.status}`);
+      return r.json();
+    });
+    for (const e of data.eclipses) {
+      e.typeCode = e.type === 'total' ? 'T' : 'P';
+      e.search = `${e.date} ${formatDate(e.date, true)} ${e.type} lunar `
+        + `saros ${e.saros}`.toLowerCase();
+    }
+    state.lunarAll = data.eclipses;
+  }
+  return state.lunarAll;
+}
+
+/** Swap the whole app between the two catalogues. */
+async function setKind(kind, { push = true } = {}) {
+  if (state.kind === kind) return;
+  if (kind === 'lunar') {
+    try { await lunarCatalogue(); }
+    catch (err) { console.error(err); toast('Could not load the lunar catalogue'); return; }
+  }
+  const wasAt = state.current?.date;
+  stopPlaying();
+  setLive(false);
+  setShadow(null);
+  if (state.visible) clearVisible();     // the visibility filter is solar-only
+  state.kind = kind;
+  document.body.classList.toggle('is-lunar', kind === 'lunar');
+  const btn = document.querySelector('.map-btn[data-role="kind"]');
+  if (btn) {
+    btn.setAttribute('aria-pressed', String(kind === 'lunar'));
+    setButtonIcon('kind', kind === 'lunar' ? 'sun' : 'moon');
+  }
+  state.all = kind === 'lunar' ? state.lunarAll : state.solarAll;
+  applyFilters();
+  // land on the same stretch of time in the other catalogue
+  const anchor = wasAt || new Date().toISOString().slice(0, 10);
+  const near = state.all.find((e) => e.date >= anchor) || state.all.at(-1);
+  await select(near.id, { push, replace: true });
+}
+
 // --------------------------------------------------- running the shadow
 
 const EMPTY_SHADOW = { type: 'FeatureCollection', features: [] };
@@ -601,6 +657,28 @@ function showTimeline(entry) {
 function updateScrubMarks() {
   const input = $('tl-scrub');
   if (!input) return;
+  if (state.kind === 'lunar') {
+    const win = state.shadowWindow;
+    const entry = state.current;
+    if (!win || !entry) { input.style.removeProperty('--tl-marks'); return; }
+    const { contacts } = lunar.geometryOf(entry);
+    const f = (t) => Math.min(100, Math.max(0, ((t - win[0]) / (win[1] - win[0])) * 100));
+    const wash = 'color-mix(in srgb, var(--accent) 35%, var(--line))';
+    const faint = 'color-mix(in srgb, var(--accent) 16%, var(--line))';
+    const stops = [`var(--line) 0% ${f(contacts.p1)}%`,
+                   `${faint} ${f(contacts.p1)}% ${f(contacts.u1)}%`];
+    if (contacts.u2 !== undefined) {
+      stops.push(`${wash} ${f(contacts.u1)}% ${f(contacts.u2)}%`,
+                 `var(--accent) ${f(contacts.u2)}% ${f(contacts.u3)}%`,
+                 `${wash} ${f(contacts.u3)}% ${f(contacts.u4)}%`);
+    } else {
+      stops.push(`${wash} ${f(contacts.u1)}% ${f(contacts.u4)}%`);
+    }
+    stops.push(`${faint} ${f(contacts.u4)}% ${f(contacts.p4)}%`,
+               `var(--line) ${f(contacts.p4)}% 100%`);
+    input.style.setProperty('--tl-marks', `linear-gradient(to right, ${stops.join(', ')})`);
+    return;
+  }
   const win = state.shadowWindow;
   let r = null;
   if (win && state.pin && state.elements) {
@@ -646,6 +724,7 @@ function updateScrubMarks() {
  * simply picking an eclipse leaves the map showing the whole-eclipse view.
  */
 function setShadowAt(fraction, showing = true) {
+  if (state.kind === 'lunar') return lunarShadowAt(fraction, showing);
   const win = state.shadowWindow;
   if (!win) return;
   const t = win[0] + (win[1] - win[0]) * fraction;
@@ -694,6 +773,52 @@ function setShadowAt(fraction, showing = true) {
   if (eyeTime) eyeTime.textContent = $('eye')?.hidden ? '' : readout;
 }
 
+/** The lunar timeline: the whole event, umbral phases plus shoulders. */
+function showLunarTimeline(entry) {
+  stopPlaying();
+  setLive(false);
+  const { contacts } = lunar.geometryOf(entry);
+  const pad = (contacts.u4 - contacts.u1) * 0.25;
+  state.shadowWindow = [contacts.u1 - pad, contacts.u4 + pad];
+  $('timeline').hidden = false;
+  document.body.classList.add('has-timeline');
+  updateScrubMarks();
+  syncUrl({ replace: true });
+  $('tl-scrub').value = '0';
+  lunarShadowAt(0, false);
+}
+
+/**
+ * Draw the lunar view at `fraction` through the window: the hemisphere that
+ * can see the Moon, tinted by the phase -- or, when nothing is being shown,
+ * the whole-eclipse picture of how much each place gets to see.
+ */
+function lunarShadowAt(fraction, showing = true) {
+  const win = state.shadowWindow;
+  const entry = state.current;
+  if (!win || !entry) return;
+  const t = win[0] + (win[1] - win[0]) * fraction;
+  const target = liveTarget();
+  if (showing) lunar.paintInstant(entry, t, target);
+  else lunar.paintSummary(entry, target);
+  ensureLiveLayer();
+  if (map.getLayer('live')) map.setLayoutProperty('live', 'visibility', 'visible');
+  const source = map.getSource('live');
+  if (source) { source.play.call(source); setTimeout(() => source.pause.call(source), 120); }
+  state.live = showing;
+  state.liveT = showing ? t : null;
+  $('tl-stop').hidden = !showing;
+  updateEye();
+
+  const ut = ((t % 24) + 24) % 24;
+  const readout = showing
+    ? `${clock(entry.date, ut, { seconds: true, reference: ((lunar.geometryOf(entry).g % 24) + 24) % 24 })} ${timeLabel()}`
+    : '\u2014';
+  $('tl-time').textContent = readout;
+  const eyeTime = $('eye-time');
+  if (eyeTime) eyeTime.textContent = $('eye')?.hidden || !showing ? '' : readout;
+}
+
 function setShadow(fc) {
   const src = map.getSource('shadow');
   if (src) src.setData(fc || EMPTY_SHADOW);
@@ -739,6 +864,20 @@ const EYE_DUSK = [0x0d, 0x14, 0x26];
 function updateEye() {
   const host = $('eye');
   if (!host) return;
+  if (state.kind === 'lunar') {
+    const t = state.liveT;
+    const entry = state.current;
+    if (t === null || !entry || !state.pin) { host.hidden = true; return; }
+    const canvas = $('eye-canvas');
+    const { label } = lunar.drawEye(canvas.getContext('2d'), canvas.width,
+                                    entry, t, state.pin);
+    const caption = $('eye-label');
+    if (caption.textContent !== label) caption.textContent = label;
+    host.setAttribute('aria-label',
+      `The Moon from the pinned place: ${label || 'full and unshadowed'}`);
+    host.hidden = false;
+    return;
+  }
   const t = state.liveT;
   const el = state.elements;
   if (t === null || !el || !state.pin) { host.hidden = true; return; }
@@ -943,16 +1082,25 @@ function drawLiveField(el, t, dark) {
     ctx.globalCompositeOperation = 'source-over';
   }
 
+  ensureLiveLayer();
+}
+
+function ensureLiveLayer() {
+  const { canvas } = liveTarget();
   if (!map.getSource('live')) {
-    map.addSource('live', { type: 'canvas', canvas, animate: true,
-                            coordinates: WORLD_CORNERS });
+    try {
+      map.addSource('live', { type: 'canvas', canvas, animate: true,
+                              coordinates: WORLD_CORNERS });
+    } catch { return; }              // style not ready yet; the next draw will be
   }
   if (!map.getLayer('live')) {
     const below = ['band-fill', 'penumbra-fill', 'path-fill']
       .find((id) => map.getLayer(id));
-    map.addLayer({ id: 'live', type: 'raster', source: 'live',
-                   paint: { 'raster-fade-duration': 0,
-                            'raster-resampling': 'linear' } }, below);
+    try {
+      map.addLayer({ id: 'live', type: 'raster', source: 'live',
+                     paint: { 'raster-fade-duration': 0,
+                              'raster-resampling': 'linear' } }, below);
+    } catch { /* same */ }
   }
 }
 
@@ -1147,7 +1295,10 @@ function buildThresholds() {
 function renderPlace() {
   const card = $('place');
   if (!card) return;
+  const visBtn = $('place-visible');
+  if (visBtn) visBtn.hidden = state.kind === 'lunar';   // that filter is solar-only
   if (!state.pin) { card.hidden = true; return; }
+  if (state.kind === 'lunar') { renderLunarPlace(card); return; }
   const pin = state.pin;
   const lngLat = { lat: pin.lat, lng: pin.lon };
   $('place-body').innerHTML = state.elements
@@ -1176,6 +1327,31 @@ function renderPlace() {
       + `data-next="${next.id}">${formatDate(next.date)}</button> — ${how}`;
     $('place-body').append(row);
   }).catch(() => { /* the card stands without it */ });
+}
+
+function renderLunarPlace(card) {
+  const pin = state.pin;
+  const entry = state.current;
+  if (!entry) { card.hidden = true; return; }
+  const { head, rows } = lunar.placeSummary(entry, pin);
+  const listed = rows.map(([name, when, seen]) =>
+    `<dt>${name}</dt><dd>${when} — ${seen}</dd>`).join('');
+  // the next lunar eclipse this place gets a proper look at
+  const today = new Date().toISOString().slice(0, 10);
+  const next = (state.lunarAll || []).find((e) => e.date >= today
+    && (e.type === 'total' || e.umbralMag >= 0.5)
+    && lunar.moonAlt(e, pin.lat, pin.lon, lunar.geometryOf(e).g) > 0);
+  const nextRow = next
+    ? `<p class="pop__note pop__next">Next from here: <button type="button"
+         class="pop__link" data-next="${next.id}">${formatDate(next.date)}</button>
+         — ${next.type === 'total' ? 'total' : 'partial'} lunar</p>`
+    : '';
+  $('place-body').innerHTML =
+    `<p class="pop__head${head.includes('below') ? ' pop__head--none' : ''}">${head}</p>`
+    + `<dl class="pop__facts">${listed}</dl>`
+    + `<p class="pop__where">${formatLatLon(pin.lat, pin.lon, 3)}</p>`
+    + nextRow;
+  card.hidden = false;
 }
 
 function circumstancesHTML(s, lngLat) {
@@ -1256,6 +1432,7 @@ async function shareView() {
 /** An .ics for the picked place: the eclipse there, first to last contact. */
 function downloadCalendar() {
   if (!state.pin) { toast('Click the map to pick a place first'); return; }
+  if (state.kind === 'lunar') return downloadLunarCalendar();
   if (!state.elements || !state.current) return;
   const r = localCircumstances(state.elements, state.pin.lat, state.pin.lon);
   if (!r) { toast('No eclipse visible from the picked place'); return; }
@@ -1290,6 +1467,49 @@ function downloadCalendar() {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([ics], { type: 'text/calendar' }));
   a.download = `eclipse-${date}.ics`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  toast('Calendar event saved');
+}
+
+function downloadLunarCalendar() {
+  const entry = state.current;
+  if (!entry) return;
+  const { contacts, g } = lunar.geometryOf(entry);
+  const summary = lunar.placeSummary(entry, state.pin);
+  if (summary.head.startsWith('Moon below')) {
+    toast('The Moon is below the horizon there for this one');
+    return;
+  }
+  const ref = ((g % 24) + 24) % 24;
+  const when = (t) => instantFor(entry.date, ((t % 24) + 24) % 24, ref);
+  const stamp = (d) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  const clean = (x) => x.replace(/[\\;,]/g, ' ');
+  const title = `${titleCase(entry.type)} lunar eclipse`
+    + (entry.totM ? ` — totality ${formatDuration(entry.totM * 60)}` : '');
+  const detail = [
+    summary.head,
+    contacts.u2 !== undefined
+      ? `totality ${lunar.utClock(contacts.u2)}–${lunar.utClock(contacts.u3)} UT`
+      : null,
+    `partial phase ${lunar.utClock(contacts.u1)}–${lunar.utClock(contacts.u4)} UT`,
+    location.href,
+  ].filter(Boolean).join(' — ');
+  const ics = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Eclipse Mapper//EN',
+    'BEGIN:VEVENT',
+    `UID:lunar-${entry.id}-${state.pin.lat.toFixed(2)}-${state.pin.lon.toFixed(2)}@eclipse-mapper`,
+    `DTSTAMP:${stamp(new Date())}`,
+    `DTSTART:${stamp(when(contacts.u1))}`,
+    `DTEND:${stamp(when(contacts.u4))}`,
+    `SUMMARY:${clean(title)}`,
+    `DESCRIPTION:${clean(detail)}`,
+    `GEO:${state.pin.lat.toFixed(4)};${state.pin.lon.toFixed(4)}`,
+    'END:VEVENT', 'END:VCALENDAR',
+  ].join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([ics], { type: 'text/calendar' }));
+  a.download = `lunar-eclipse-${entry.date}.ics`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   toast('Calendar event saved');
@@ -1378,7 +1598,33 @@ function prefetchNeighbours(id) {
 
 // ------------------------------------------------------------- selection
 
-async function select(id, { fit = true, push = true, replace = false } = {}) {
+async function select(id, opts = {}) {
+  if (state.kind === 'lunar') return selectLunar(id, opts);
+  return selectSolar(id, opts);
+}
+
+/** Lunar selection: no geometry to fetch -- the catalogue row is everything. */
+async function selectLunar(id, { fit = true, push = true, replace = false } = {}) {
+  const entry = state.all.find((e) => e.id === id);
+  if (!entry) return;
+  loadToken++;                       // cancel any solar load still in flight
+  state.current = entry;
+  state.elements = null;
+  renderInfo(entry);
+  markCurrentInList();
+  $('stepper-now').textContent = formatDate(entry.date, true);
+  updateStepper();
+  if (push) syncUrl({ replace });
+  renderPlace();
+  setMapData(EMPTY);
+  showLunarTimeline(entry);
+  if (fit) {
+    map.easeTo({ center: [entry.zenith.lon, entry.zenith.lat],
+                 zoom: Math.min(map.getZoom(), 2.2), duration: 700 });
+  }
+}
+
+async function selectSolar(id, { fit = true, push = true, replace = false } = {}) {
   const entry = state.all.find((e) => e.id === id);
   if (!entry) return;
 
@@ -1417,13 +1663,18 @@ function syncUrl({ replace = false } = {}) {
   // A shown moment goes into the address as its UT clock time, so a shared
   // link opens mid-eclipse. Only written when the timeline is showing one --
   // and only on a pause or a scrub, never per frame of playback.
-  if (state.live && state.liveT !== null && state.elements) {
-    const s = Math.round(toUT(state.elements, state.liveT) * 3600);
+  if (state.live && state.liveT !== null
+      && (state.kind === 'lunar' || state.elements)) {
+    const ut = state.kind === 'lunar'
+      ? state.liveT                       // lunar time is already UT hours
+      : toUT(state.elements, state.liveT);
+    const s = Math.round(ut * 3600);
     q.set('t', [3600, 60, 1].map((d, i) =>
       String(Math.floor(s / d) % (i ? 60 : 24)).padStart(2, '0')).join(''));
   }
   const query = q.toString();
-  const path = state.current ? `/eclipse/${state.current.date}/` : '/';
+  const base = state.kind === 'lunar' ? 'lunar' : 'eclipse';
+  const path = state.current ? `/${base}/${state.current.date}/` : '/';
   const url = query ? `${path}?${query}` : path;
   if (replace || url === location.pathname + location.search) {
     history.replaceState({}, '', url);
@@ -1444,11 +1695,12 @@ function pinFromUrl() {
 function applyMoment(raw) {
   const win = state.shadowWindow;
   const el = state.elements;
-  if (!raw || !win || !el || !/^\d{6}$/.test(raw)) return;
+  if (!raw || !win || !/^\d{6}$/.test(raw)) return;
+  if (state.kind !== 'lunar' && !el) return;
   const ut = Number(raw.slice(0, 2)) + Number(raw.slice(2, 4)) / 60 + Number(raw.slice(4)) / 3600;
   // toUT is t plus a constant, mod 24 -- so invert it and pick the day's copy
-  // that lands nearest the crossing.
-  let t = ut - el.t0 + el.deltaT / 3600;
+  // that lands nearest the crossing. Lunar windows are UT already.
+  let t = state.kind === 'lunar' ? ut : ut - el.t0 + el.deltaT / 3600;
   const mid = (win[0] + win[1]) / 2;
   t += 24 * Math.round((mid - t) / 24);
   const fraction = (t - win[0]) / (win[1] - win[0]);
@@ -1573,6 +1825,7 @@ function markCurrentInList() {
 // -------------------------------------------------------------- the facts
 
 function renderInfo(e) {
+  if (state.kind === 'lunar') return renderLunarInfo(e);
   const ref = e.greatest.ut ? hoursOf(e.greatest.ut) : 12;
   const at = (hhmm, opts) => clock(e.date, hoursOf(hhmm), { reference: ref, ...opts });
   const span = (from, to) => `${at(from)}–${at(to)} ${timeLabel()}`;
@@ -1620,6 +1873,45 @@ function renderInfo(e) {
     + `<details class="facts__more"><summary>More</summary>${dl(more)}</details>`
     + '<div id="facts-cities"></div>';
   renderCities(e);
+}
+
+function renderLunarInfo(e) {
+  const { contacts, g } = lunar.geometryOf(e);
+  const ref = ((g % 24) + 24) % 24;
+  const at = (t, opts) => clock(e.date, ((t % 24) + 24) % 24, { reference: ref, ...opts });
+  const span = (a, b) => `${at(a)}–${at(b)} ${timeLabel()}`;
+  const pairs = [
+    ['Type', `${titleCase(e.type)} lunar<span class="facts__code"> ${e.typeCode}</span>`],
+    ['Saros', `<button type="button" class="facts__series" data-saros="${e.saros}"
+                       title="Show the rest of this series">${e.saros}</button>`],
+    ['Umbral mag.', e.umbralMag.toFixed(3)],
+    ['Penumbral', e.penMag.toFixed(3)],
+  ];
+  const wide = [];
+  if (contacts.u2 !== undefined) {
+    wide.push(['Totality', `${span(contacts.u2, contacts.u3)} · ${formatDuration(e.totM * 60)}`]);
+  }
+  wide.push(['Greatest', `${at(g, { seconds: true })} ${timeLabel()}`]);
+  wide.push(['Partial phase', span(contacts.u1, contacts.u4)]);
+  wide.push(['Penumbral', span(contacts.p1, contacts.p4)]);
+  const more = [
+    ['Gamma', signed(e.gamma, 4)],
+    ['Moon overhead', formatLatLon(e.zenith.lat, e.zenith.lon)],
+  ];
+  const dl = (rows, cls) =>
+    `<dl class="facts ${cls || ''}">`
+    + rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')
+    + '</dl>';
+  const note = e.type === 'total'
+    ? 'Visible from the entire night side of the Earth at once — anywhere the '
+      + 'Moon is up sees the same eclipse at the same moment.'
+    : 'The Moon only clips the umbra, so part of it stays bright throughout. '
+      + 'Visible from the whole night side at once.';
+  $('facts').innerHTML =
+    dl(pairs, 'facts--pairs')
+    + dl(wide)
+    + `<p class="facts__note">${note}</p>`
+    + '<div id="facts-cities"></div>';
 }
 
 // The cities standing in the path, precomputed by the pipeline into one file
@@ -1835,6 +2127,7 @@ function buildChips() {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'chip';
+    b.dataset.type = key;
     b.setAttribute('aria-pressed', 'false');
     b.innerHTML = `<i class="chip__dot" style="background:var(--${key === 'partial' ? 'penumbra' : key === 'hybrid' ? 'greatest' : key})"></i>${label}`;
     b.addEventListener('click', () => {
@@ -1949,6 +2242,7 @@ async function boot() {
   }
 
   state.version = index.version || '';
+  state.solarAll = index.eclipses;
   state.all = index.eclipses;
   for (const e of state.all) {
     e.search = `${e.date} ${formatDate(e.date, true)} ${e.type} saros ${e.saros}`.toLowerCase();
@@ -2047,8 +2341,23 @@ async function boot() {
   // would drop `at=` before we ever looked at it.
   const startPin = pinFromUrl();
   const startMoment = new URLSearchParams(location.search).get('t');
-  const start = idFromUrl() || defaultId();
-  const selected = select(start, { replace: true, fit: false });
+  // /lunar/<date>/ is the page form; ?l=YYYYMMDD is the fallback the 404
+  // bounce uses, exactly as ?e= is for the solar pages.
+  const onLunar = location.pathname.match(/^\/lunar\/(\d{4}-\d{2}-\d{2})\/?$/)
+    || (/^\d{8}$/.test(new URLSearchParams(location.search).get('l') || '')
+        ? [null, new URLSearchParams(location.search).get('l')
+            .replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3')]
+        : null);
+  let selected;
+  if (onLunar) {
+    selected = (async () => {
+      await setKind('lunar', { push: false });
+      const wanted = state.all.find((e) => e.date === onLunar[1]);
+      if (wanted) await select(wanted.id, { replace: true, fit: false });
+    })();
+  } else {
+    selected = select(idFromUrl() || defaultId(), { replace: true, fit: false });
+  }
   map.once('load', () => {
     fitToCurrent();
     if (startPin) setPin(startPin, { push: false });

@@ -136,6 +136,14 @@ body.has-timeline .place { bottom: 6.4rem; }
   font-size: 1rem; line-height: 1; cursor: pointer;
 }
 .place__close:hover { background: var(--bg-sunk); color: var(--ink); }
+/* Lunar mode: the pieces that only mean anything for a solar eclipse go away.
+   The legend describes path layers, the annular/hybrid chips name types the
+   Moon does not have, and the visible-from-here filter is Besselian. */
+body.is-lunar .chip[data-type="annular"],
+body.is-lunar .chip[data-type="hybrid"],
+body.is-lunar .legend,
+body.is-lunar .legend__title { display: none; }
+
 .pop__link {
   font: inherit; padding: 0; border: 0; background: none; cursor: pointer;
   color: var(--accent); text-decoration: underline dotted;
