@@ -11,6 +11,7 @@ public/data/
 # Generated alongside public/data: a page and a share image per eclipse,
 # and the sitemap listing them. Same reasoning as public/data above.
 public/eclipse/
+public/lunar/
 public/preview/
 public/sitemap.xml
 

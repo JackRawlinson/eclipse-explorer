@@ -80,7 +80,10 @@ export function phaseAt(entry, t) {
 // handed over by the app. Darkness means the same thing it means on the solar
 // side: what you do not get to see.
 
-/** The whole-eclipse view: how much of the umbral eclipse each place sees. */
+/** The whole-eclipse view: how much of the umbral eclipse each place misses.
+    Lunar mode runs on the dark basemap, so the wash is pale -- daylight, the
+    reason a place misses out -- and where the whole eclipse is seen the map
+    stays dark, which is what the sky does there. */
 export function paintSummary(entry, target) {
   const { lats, lons, canvas, ctx, field, image } = target;
   const { contacts } = geometryOf(entry);
@@ -107,25 +110,28 @@ export function paintSummary(entry, target) {
   const px = image.data;
   for (let k = 0, p = 0; k < field.length; k++, p += 4) {
     const missed = 1 - field[k];
-    px[p] = 11; px[p + 1] = 18; px[p + 2] = 32;
-    px[p + 3] = Math.round(200 * missed ** 1.15);
+    px[p] = 226; px[p + 1] = 232; px[p + 2] = 240;
+    px[p + 3] = Math.round(150 * missed ** 1.2);
   }
   ctx.putImageData(image, 0, 0);
   return canvas;
 }
 
-/** One instant: the hemisphere that can see the Moon, tinted by the phase. */
+/** One instant. The Moon-up side IS the night side, so on the dark basemap it
+    stays clear -- carrying only the colour of the eclipse itself, red at
+    totality. The Moon-down side is in daylight and gets a pale wash. */
 export function paintInstant(entry, t, target) {
   const { lats, lons, canvas, ctx, image } = target;
   const now = phaseAt(entry, t);
   const s = sublunar(entry, t);
   const sinS = Math.sin(s.lat * DEG);
   const cosS = Math.cos(s.lat * DEG);
-  // Where the Moon is up, a wash in the colour of what it looks like now;
-  // where it is down, the same dark meaning as everywhere else on the site.
-  const tint = now.phase === 'total' ? [127, 20, 22, 70]
-    : now.phase === 'partial' ? [146, 64, 14, 26 + Math.round(30 * Math.min(1, now.umbralMag))]
-    : [148, 163, 184, 12];
+  const tint = now.phase === 'total' ? [227, 74, 48, 82]
+    : now.phase === 'partial'
+      ? [245, 158, 11, 18 + Math.round(42 * Math.min(1, now.umbralMag))]
+    : now.phase === 'penumbral' ? [148, 163, 184, 16]
+    : [0, 0, 0, 0];
+  const DAY = [226, 232, 240, 84];
   const W = lons.length;
   const px = image.data;
   for (let j = 0; j < lats.length; j++) {
@@ -134,18 +140,43 @@ export function paintInstant(entry, t, target) {
     for (let i = 0; i < W; i++) {
       const p = (j * W + i) * 4;
       const upness = sinLat * sinS + cosLat * cosS * Math.cos((lons[i] - s.lon) * DEG);
-      if (upness > 0) {
-        px[p] = tint[0]; px[p + 1] = tint[1]; px[p + 2] = tint[2];
-        // a soft edge right at moonrise/moonset, then flat
-        px[p + 3] = Math.round(tint[3] * Math.min(1, upness / 0.05));
-      } else {
-        px[p] = 11; px[p + 1] = 18; px[p + 2] = 32;
-        px[p + 3] = 190;
-      }
+      const src = upness > 0 ? tint : DAY;
+      const soft = Math.min(1, Math.abs(upness) / 0.04);   // eases only the seam
+      px[p] = src[0]; px[p + 1] = src[1]; px[p + 2] = src[2];
+      px[p + 3] = Math.round(src[3] * soft);
     }
   }
   ctx.putImageData(image, 0, 0);
   return canvas;
+}
+
+/** The moonrise/moonset line at `t`: a great circle 90 degrees from the
+    sub-lunar point, split where it crosses the antimeridian, for drawing as a
+    crisp line over the soft raster. */
+export function horizonLine(entry, t, steps = 240) {
+  const s = sublunar(entry, t);
+  const sinP = Math.sin(s.lat * DEG);
+  const cosP = Math.cos(s.lat * DEG);
+  const parts = [];
+  let run = [];
+  let prev = null;
+  for (let k = 0; k <= steps; k++) {
+    const th = (2 * Math.PI * k) / steps;
+    // destination point at 90 degrees along bearing th from the sub-lunar point
+    const sinLat = cosP * Math.cos(th);
+    const lat = Math.asin(Math.min(1, Math.max(-1, sinLat))) / DEG;
+    const lon = s.lon
+      + Math.atan2(Math.sin(th) * cosP, -sinP * sinLat) / DEG;
+    const L = ((lon + 540) % 360) - 180;
+    if (prev !== null && Math.abs(L - prev) > 180) {
+      if (run.length > 1) parts.push(run);
+      run = [];
+    }
+    run.push([L, lat]);
+    prev = L;
+  }
+  if (run.length > 1) parts.push(run);
+  return parts;
 }
 
 // ------------------------------------------------------------- the eye disc
@@ -235,14 +266,16 @@ export function drawEye(ctx, size, entry, t, pin) {
   }
   ctx.restore();
 
-  // the ground, exactly as the solar disc does it
+  // The ground, exactly as the solar disc does it. The altitude is clamped
+  // for drawing: far enough below the horizon the ground is simply everything,
+  // rather than a band that slides out through the top of the disc.
   if (pin && alt < 10) {
-    const yH = cy + (alt / 10) * edge;
+    const yH = cy + (Math.max(alt, -12) / 10) * edge;
     const ground = ctx.createLinearGradient(0, yH, 0, cy + edge * 1.2);
     ground.addColorStop(0, '#131a17');
     ground.addColorStop(1, '#070a08');
     ctx.fillStyle = ground;
-    ctx.fillRect(0, yH, size, size);
+    ctx.fillRect(0, yH, size, size * 2);
   }
   ctx.restore();
 

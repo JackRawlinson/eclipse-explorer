@@ -80,7 +80,8 @@ function saveSettings() {
 }
 
 const basemapIndex = () =>
-  Math.max(0, BASEMAPS.findIndex((b) => b.id === state.settings.basemap));
+  Math.max(0, BASEMAPS.findIndex(
+    (b) => b.id === (state.basemapOverride || state.settings.basemap)));
 
 const maskKey = () => {
   const { tint, shade, gamma } = state.settings;
@@ -581,6 +582,19 @@ async function setKind(kind, { push = true } = {}) {
   if (state.visible) clearVisible();     // the visibility filter is solar-only
   state.kind = kind;
   document.body.classList.toggle('is-lunar', kind === 'lunar');
+  // Lunar mode borrows the dark basemap -- it is a night event, and the red
+  // and pale washes are drawn for a dark ground. The person's own choice is
+  // untouched and comes back with the Sun; picking a basemap by hand while
+  // in lunar mode wins over the borrowing.
+  if (kind === 'lunar') {
+    if (!BASEMAPS[basemapIndex()].dark) {
+      state.basemapOverride = 'dark';
+      applyBasemap();
+    }
+  } else if (state.basemapOverride) {
+    state.basemapOverride = null;
+    applyBasemap();
+  }
   const btn = document.querySelector('.map-btn[data-role="kind"]');
   if (btn) {
     btn.setAttribute('aria-pressed', String(kind === 'lunar'));
@@ -799,8 +813,20 @@ function lunarShadowAt(fraction, showing = true) {
   if (!win || !entry) return;
   const t = win[0] + (win[1] - win[0]) * fraction;
   const target = liveTarget();
-  if (showing) lunar.paintInstant(entry, t, target);
-  else lunar.paintSummary(entry, target);
+  const lines = [];
+  if (showing) {
+    lunar.paintInstant(entry, t, target);
+    lines.push({ kind: 'terminator', at: t });
+  } else {
+    lunar.paintSummary(entry, target);
+    const { contacts } = lunar.geometryOf(entry);
+    lines.push({ kind: 'rim', at: contacts.u1 }, { kind: 'rim', at: contacts.u4 });
+  }
+  setShadow({ type: 'FeatureCollection',
+              features: lines.map(({ kind, at }) => ({
+                type: 'Feature', properties: { kind },
+                geometry: { type: 'MultiLineString',
+                            coordinates: lunar.horizonLine(entry, at) } })) });
   ensureLiveLayer();
   if (map.getLayer('live')) map.setLayoutProperty('live', 'visibility', 'visible');
   const source = map.getSource('live');
@@ -958,12 +984,14 @@ function updateEye() {
   // scale is deliberately compressed -- to true scale the horizon would only
   // enter this narrow a view for the last fraction of a degree.
   if (alt < 10) {
-    const yH = cy + (alt / 10) * edge;
+    // clamped: far below the horizon the ground is everything, not a band
+    // that slides out through the top of the disc
+    const yH = cy + (Math.max(alt, -12) / 10) * edge;
     const ground = ctx.createLinearGradient(0, yH, 0, cy + edge * 1.2);
     ground.addColorStop(0, '#232d28');
     ground.addColorStop(1, '#0c110e');
     ctx.fillStyle = ground;
-    ctx.fillRect(0, yH, size, size);
+    ctx.fillRect(0, yH, size, size * 2);
     // the last light along the horizon, when the Sun is near it
     const glow = Math.max(0, 1 - Math.abs(alt) / 6) * (1 - o * 0.85);
     if (glow > 0.02) {
@@ -2038,7 +2066,10 @@ function buildSettings() {
   };
 
   chips($('set-basemap'), BASEMAPS.map((b) => [b.id, b.label]),
-        () => s.basemap, (id) => { s.basemap = id; saveSettings(); applyBasemap(); });
+        () => s.basemap, (id) => {
+          s.basemap = id; state.basemapOverride = null;
+          saveSettings(); applyBasemap();
+        });
 
   chips($('set-times'), [['ut', 'UT'], ['local', `Yours (${LOCAL_ZONE})`]],
         () => s.times, (v) => {

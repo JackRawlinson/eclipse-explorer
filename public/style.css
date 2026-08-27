@@ -144,6 +144,15 @@ body.is-lunar .chip[data-type="hybrid"],
 body.is-lunar .legend,
 body.is-lunar .legend__title { display: none; }
 
+/* Which kind of eclipse the stepper is stepping through. */
+.stepper__now::before {
+  content: '☀';
+  margin-right: .4rem;
+  opacity: .55;
+  font-size: .9em;
+}
+body.is-lunar .stepper__now::before { content: '☾'; opacity: .75; }
+
 .pop__link {
   font: inherit; padding: 0; border: 0; background: none; cursor: pointer;
   color: var(--accent); text-decoration: underline dotted;
