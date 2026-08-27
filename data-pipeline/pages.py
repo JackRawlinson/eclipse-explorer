@@ -58,6 +58,19 @@ h2 { font-size: 1rem; margin: 1.4rem 0 .4rem; padding-bottom: .2rem;
 ul.years, ul.list { list-style: none; margin: 0 0 1rem; padding: 0;
   display: grid; gap: .3rem; font-size: .9rem; }
 .note { color: #64748b; font-size: .8rem; }
+.yearnav { display: flex; align-items: center; gap: .8rem; margin: 0 0 .35rem; }
+.yearnav h1 { margin: 0; min-width: 0; }
+.yearnav__step { flex: none; display: grid; place-items: center;
+  width: 2rem; height: 2rem; border-radius: 50%; border: 1px solid #e2e8f0;
+  color: #4c1d95; font-size: 1.15rem; line-height: 1; text-decoration: none; }
+.yearnav__step:hover { border-color: #4c1d95; }
+.yearnav__step--off { visibility: hidden; }
+.yearnav__year { font: inherit; color: inherit; background: none; border: none;
+  padding: 0; cursor: pointer; border-bottom: 2px dotted #94a3b8; }
+.yearnav__year:hover { border-bottom-color: #4c1d95; }
+.yearnav__input { font: inherit; width: 4.5ch; background: none; color: inherit;
+  border: none; border-bottom: 2px solid #4c1d95; padding: 0; }
+.yearnav__input:focus { outline: none; }
 @media (prefers-color-scheme: dark) {
   body { background: #0b1120; color: #f8fafc; }
   .lead, dt { color: #94a3b8; }
@@ -66,8 +79,46 @@ ul.years, ul.list { list-style: none; margin: 0 0 1rem; padding: 0;
   a { color: #a78bfa; }
   .credit, .note { color: #64748b; }
   h2 { border-color: #1e293b; }
+  .yearnav__step { border-color: #1e293b; color: #a78bfa; }
+  .yearnav__step:hover { border-color: #a78bfa; }
+  .yearnav__input { border-bottom-color: #a78bfa; }
 }
 """
+
+# The year in the heading turns into a field when clicked; Enter goes to that
+# year's page. Without JavaScript the button simply does nothing, and the +/-
+# links either side still work, being ordinary links.
+YEAR_SCRIPT = """<script>
+(function () {
+  var label = document.getElementById('year');
+  if (!label) return;
+  label.title = 'Click to type a year';
+  label.addEventListener('click', function () {
+    var field = document.createElement('input');
+    field.type = 'text';
+    field.inputMode = 'numeric';
+    field.className = 'yearnav__input';
+    field.value = label.textContent;
+    field.setAttribute('aria-label', 'Year, 1900 to 2100');
+    label.replaceWith(field);
+    field.focus();
+    field.select();
+    field.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter') {
+        var year = parseInt(field.value, 10);
+        if (!year) return;
+        year = Math.min(2100, Math.max(1900, year));
+        location.href = '/eclipse/' + year + '/';
+      } else if (event.key === 'Escape') {
+        field.replaceWith(label);
+      }
+    });
+    field.addEventListener('blur', function () {
+      if (field.parentNode) field.replaceWith(label);
+    });
+  });
+})();
+</script>"""
 
 CREDIT = ('Eclipse Predictions by Fred Espenak, NASA’s GSFC, from the '
           'Besselian elements of the '
@@ -215,7 +266,15 @@ def render_eclipse(template, entry, base_url):
     return page
 
 
-def render_year(year, entries, base_url):
+def _year_step(year, sign):
+    if year is None:
+        return f'<span class="yearnav__step yearnav__step--off">{sign}</span>'
+    return (f'<a class="yearnav__step" href="/eclipse/{year}/" '
+            f'aria-label="Solar eclipses in {year}" '
+            f'title="Solar eclipses in {year}">{sign}</a>')
+
+
+def render_year(year, entries, base_url, before=None, after=None):
     listed = "".join(
         f'<li><a href="/eclipse/{slug(e)}/">{html.escape(title_for(e))}</a> '
         f'<span class="note">{html.escape(_summary(e))}</span></li>'
@@ -227,11 +286,14 @@ def render_year(year, entries, base_url):
     offers = ("Paths, times and how much of the Sun is covered." if central
               else "Times, and how much of the Sun is covered.")
     desc = f"{count} solar eclipse{'s' if count != 1 else ''} in {year}: {kinds}. {offers}"
-    body = f"""<h1>Solar eclipses in {year}</h1>
+    body = f"""<div class="yearnav">{_year_step(before, "−")}
+<h1>Solar eclipses in <button type="button" class="yearnav__year" id="year">{year}</button></h1>
+{_year_step(after, "+")}</div>
 <p class="lead">{html.escape(desc)}</p>
 <ul class="list">{listed}</ul>
 <nav><a href="/eclipse/">Every eclipse, 1900 to 2100</a>
-<a href="/">Open the interactive map</a></nav>"""
+<a href="/">Open the interactive map</a></nav>
+{YEAR_SCRIPT}"""
     return _shell(f"Solar eclipses in {year}", desc,
                   f"{base_url}/eclipse/{year}/", body)
 
@@ -291,11 +353,16 @@ def write_all(entries, public_dir, base_url):
     by_year = {}
     for entry in ordered:
         by_year.setdefault(entry["date"][:4], []).append(entry)
-    for year, group in by_year.items():
+    # Neighbours come from the years that exist, not year arithmetic, so a year
+    # with no eclipses (there are none, but the data decides) is stepped over.
+    years = sorted(by_year)
+    for position, year in enumerate(years):
+        before = years[position - 1] if position else None
+        after = years[position + 1] if position + 1 < len(years) else None
         directory = os.path.join(public_dir, "eclipse", year)
         os.makedirs(directory, exist_ok=True)
         with open(os.path.join(directory, "index.html"), "w") as fh:
-            fh.write(render_year(year, group, base_url))
+            fh.write(render_year(year, by_year[year], base_url, before, after))
 
     with open(os.path.join(public_dir, "eclipse", "index.html"), "w") as fh:
         fh.write(render_list(ordered, base_url))
