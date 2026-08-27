@@ -164,17 +164,6 @@ function buildMap() {
   // that follows from the choice -- the panel theme, the dark-basemap note.
   applyBasemap({ restyle: false });
 
-  // Scenery for the globe: a sun, a moon, some stars. Purely decorative -- the
-  // real Sun and Moon sit behind the camera when the day side faces you, which
-  // is why the shadow does. Placed under the canvas, which is transparent only
-  // where there is no globe, so the globe occludes them for free.
-  const decor = document.createElement('div');
-  decor.className = 'space-decor';
-  decor.setAttribute('aria-hidden', 'true');
-  decor.innerHTML = '<div class="space-decor__sun"></div>'
-    + '<div class="space-decor__moon"></div>';
-  map.getContainer().prepend(decor);
-
   // Both credits belong here rather than in a panel: a panel scrolls, and on a
   // phone it can be shut altogether, so anything kept only in there is
   // effectively unattributed. The wording is the acknowledgment the eclipse
@@ -527,10 +516,8 @@ function toggleGlobe() {
   const btn = document.querySelector('.map-btn[data-role="globe"]');
   if (btn) btn.setAttribute('aria-pressed', String(state.globe));
   setButtonIcon('globe', state.globe ? 'flat' : 'globe');
-  const scenery = (on) => map.getContainer().classList.toggle('map-globe', on);
   if (!state.globe) {
     try { map.setProjection({ type: 'mercator' }); fitToCurrent(); } catch { /* nothing to undo */ }
-    scenery(false);
     return;
   }
   // MapLibre has called the round one both things across versions
@@ -538,7 +525,6 @@ function toggleGlobe() {
     try {
       map.setProjection({ type });
       fitToCurrent();          // the globe can show the poles, so reframe
-      scenery(true);
       return;
     } catch { /* try the other name */ }
   }
