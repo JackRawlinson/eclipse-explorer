@@ -823,10 +823,12 @@ function updateEye() {
     ctx.restore();
   }
 
+  // 100% belongs to totality alone; the seconds either side of it are a 99.9%
+  // that must not round up to a claim the geometry is not making.
   const label = !v.up ? 'Sun below the horizon'
     : total ? 'Totality'
     : annular ? 'Annular'
-    : o >= 0.005 ? `${Math.round(o * 100)}% covered`
+    : o >= 0.005 ? `${Math.min(99, Math.round(o * 100))}% covered`
     : '';
   ctx.restore();
 
@@ -1144,8 +1146,10 @@ function circumstancesHTML(s, lngLat) {
     : `<p class="pop__head">${formatObscuration(s.obscuration)} of the Sun covered</p>`;
 
   if (s.durationS) {
+    // To the second: the whole event can be shorter than the minute the times
+    // would otherwise round to.
     rows.push([s.total ? 'Totality' : 'Annularity',
-               `${when(s.c2)} – ${when(s.c3)} ${timeLabel()}`]);
+               `${when(s.c2, { seconds: true })} – ${when(s.c3, { seconds: true })} ${timeLabel()}`]);
     rows.push(['Obscuration', formatObscuration(s.obscuration)]);
   }
   rows.push(['Maximum', `${when(s.tMax, { seconds: true })} ${timeLabel()}`]);
