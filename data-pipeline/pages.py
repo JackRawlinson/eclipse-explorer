@@ -282,6 +282,124 @@ def render_eclipse(template, entry, base_url, cities=None):
     return page
 
 
+RM_MOON = 0.2725
+
+
+def _lunar_contacts(entry):
+    g = entry["greatestUT"]
+    half = lambda m: (m or 0) / 60 / 2
+    c = {"p1": g - half(entry.get("penM")), "p4": g + half(entry.get("penM")),
+         "u1": g - half(entry.get("parM")), "u4": g + half(entry.get("parM"))}
+    if entry.get("totM"):
+        c["u2"] = g - half(entry["totM"])
+        c["u3"] = g + half(entry["totM"])
+    return c
+
+
+def _ut(hours):
+    s = int(round(((hours % 24) + 24) % 24 * 60))
+    return f"{s // 60:02d}:{s % 60:02d}"
+
+
+def lunar_title(entry):
+    return f"{TYPE_NAMES[entry['type']]} lunar eclipse, {long_date(entry['date'])}"
+
+
+def lunar_description(entry):
+    c = _lunar_contacts(entry)
+    when = long_date(entry["date"])
+    if entry.get("totM"):
+        head = (f"A total lunar eclipse on {when}, with totality lasting "
+                f"{duration(entry['totM'] * 60)}, {_ut(c['u2'])}\u2013{_ut(c['u3'])} UT")
+    else:
+        head = (f"A partial lunar eclipse on {when}, "
+                f"{_ut(c['u1'])}\u2013{_ut(c['u4'])} UT")
+    return (f"{head}. Visible from the entire night side of the Earth; "
+            f"the Moon stands overhead near "
+            f"{lat_lon(entry['zenith']['lat'], entry['zenith']['lon'])}. "
+            f"Umbral magnitude {entry['umbralMag']:.3f}, saros {entry['saros']}.")
+
+
+def _lunar_rows(entry):
+    c = _lunar_contacts(entry)
+    rows = [("Type", f"{TYPE_NAMES[entry['type']]} lunar"),
+            ("Date", long_date(entry["date"]))]
+    if entry.get("totM"):
+        rows.append(("Totality", f"{_ut(c['u2'])}\u2013{_ut(c['u3'])} UT"
+                     f" \u00b7 {duration(entry['totM'] * 60)}"))
+    rows.append(("Partial phase", f"{_ut(c['u1'])}\u2013{_ut(c['u4'])} UT"))
+    rows.append(("Penumbral", f"{_ut(c['p1'])}\u2013{_ut(c['p4'])} UT"))
+    rows.append(("Umbral magnitude", f"{entry['umbralMag']:.3f}"))
+    rows.append(("Moon overhead near",
+                 lat_lon(entry["zenith"]["lat"], entry["zenith"]["lon"])))
+    rows.append(("Saros series", str(entry["saros"])))
+    return rows
+
+
+def render_lunar(template, entry, base_url):
+    """The app again, stamped with a lunar eclipse's identity."""
+    import re
+    title = lunar_title(entry)
+    full = f"{title} \u2014 who sees it and when"
+    desc = lunar_description(entry)
+    url = f"{base_url}/lunar/{entry['date']}/"
+    image = f"{base_url}/preview/lunar-{entry['id']}.png"
+    page = template
+    for pattern, value in [
+        (r"<title>.*?</title>", f"<title>{html.escape(full)}</title>"),
+        (r'<meta name="description" content="[^"]*"',
+         f'<meta name="description" content="{html.escape(desc, quote=True)}"'),
+        (r'<link rel="canonical" href="[^"]*">',
+         f'<link rel="canonical" href="{url}">'),
+        (r'<meta property="og:url" content="[^"]*">',
+         f'<meta property="og:url" content="{url}">'),
+        (r'<meta property="og:title" content="[^"]*">',
+         f'<meta property="og:title" content="{html.escape(full, quote=True)}">'),
+        (r'<meta property="og:description" content="[^"]*">',
+         f'<meta property="og:description" content="{html.escape(desc, quote=True)}"'
+         '>'),
+        (r'<meta property="og:image" content="[^"]*">',
+         f'<meta property="og:image" content="{image}">'),
+        (r'<meta property="og:image:alt" content="[^"]*">',
+         f'<meta property="og:image:alt" content="'
+         f'{html.escape(title, quote=True)}: the Moon in the Earth\u2019s shadow.">'),
+    ]:
+        page = re.sub(pattern, value, page, count=1)
+    page = re.sub(r'<h1 class="sr-only">.*?</h1>',
+                  f'<h1 class="sr-only">{html.escape(title)}</h1>',
+                  page, count=1, flags=re.S)
+    facts = "".join(f"<dt>{html.escape(k)}</dt><dd>{html.escape(v)}</dd>"
+                    for k, v in _lunar_rows(entry))
+    page = page.replace(
+        '<div id="facts"></div>',
+        f'<div id="facts"><p class="facts__note">{html.escape(desc)}</p>'
+        f'<dl class="facts">{facts}</dl></div>', 1)
+    return page
+
+
+def render_lunar_list(entries, base_url):
+    by_year = {}
+    for e in entries:
+        by_year.setdefault(e["date"][:4], []).append(e)
+    blocks = []
+    for year in sorted(by_year):
+        links = "".join(
+            f'<li><a href="/lunar/{e["date"]}/">{html.escape(lunar_title(e))}</a></li>'
+            for e in by_year[year])
+        blocks.append(f'<h2>{year}</h2><ul class="years">{links}</ul>')
+    desc = (f"A list of all {len(entries)} lunar eclipses between "
+            f"{entries[0]['date'][:4]} and {entries[-1]['date'][:4]} \u2014 "
+            "every total and partial eclipse of the Moon, each with its "
+            "times and visibility.")
+    body = f"""<h1>Every lunar eclipse, 1900 to 2100</h1>
+<p class="lead">{html.escape(desc)}
+<a href="/">Open the interactive map</a>.
+<a href="/eclipse/">Solar eclipses instead</a>.</p>
+{''.join(blocks)}"""
+    return _shell("Every lunar eclipse, 1900 to 2100", desc,
+                  f"{base_url}/lunar/", body)
+
+
 def _year_step(year, sign):
     if year is None:
         return f'<span class="yearnav__step yearnav__step--off">{sign}</span>'
@@ -290,7 +408,7 @@ def _year_step(year, sign):
             f'title="Solar eclipses in {year}">{sign}</a>')
 
 
-def render_year(year, entries, base_url, before=None, after=None):
+def render_year(year, entries, base_url, before=None, after=None, lunar=None):
     listed = "".join(
         f'<li><a href="/eclipse/{slug(e)}/">{html.escape(title_for(e))}</a> '
         f'<span class="note">{html.escape(_summary(e))}</span></li>'
@@ -307,11 +425,23 @@ def render_year(year, entries, base_url, before=None, after=None):
 {_year_step(after, "+")}</div>
 <p class="lead">{html.escape(desc)}</p>
 <ul class="list">{listed}</ul>
+{_lunar_year_block(lunar)}
 <nav><a href="/eclipse/">Every eclipse, 1900 to 2100</a>
+<a href="/lunar/">Every lunar eclipse</a>
 <a href="/">Open the interactive map</a></nav>
 {YEAR_SCRIPT}"""
     return _shell(f"Solar eclipses in {year}", desc,
                   f"{base_url}/eclipse/{year}/", body)
+
+
+def _lunar_year_block(entries):
+    if not entries:
+        return ""
+    listed = "".join(
+        f'<li><a href="/lunar/{e["date"]}/">{html.escape(lunar_title(e))}</a> '
+        f'<span class="note">{"totality " + duration(e["totM"] * 60) if e.get("totM") else "partial only"}</span></li>'
+        for e in entries)
+    return f'<h2>Lunar eclipses the same year</h2><ul class="list">{listed}</ul>'
 
 
 def _summary(entry):
@@ -344,11 +474,14 @@ def render_list(entries, base_url):
                   f"{base_url}/eclipse/", body)
 
 
-def render_sitemap(entries, base_url):
+def render_sitemap(entries, base_url, lunar=()):
     years = sorted({e["date"][:4] for e in entries})
     urls = [f"{base_url}/", f"{base_url}/eclipse/"]
     urls += [f"{base_url}/eclipse/{y}/" for y in years]
     urls += [f"{base_url}/eclipse/{slug(e)}/" for e in entries]
+    if lunar:
+        urls.append(f"{base_url}/lunar/")
+        urls += [f"{base_url}/lunar/{e['date']}/" for e in lunar]
     body = "".join(f"<url><loc>{u}</loc></url>" for u in urls)
     return ('<?xml version="1.0" encoding="UTF-8"?>'
             '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
@@ -367,11 +500,21 @@ def _city_times(public_dir):
     return cities.build()
 
 
+def _lunar_entries(public_dir):
+    path = os.path.join(public_dir, "data", "lunar.json")
+    if not os.path.exists(path):
+        import lunar as lunar_mod
+        lunar_mod.write(lunar_mod.parse())
+    with open(path) as fh:
+        return json.load(fh)["eclipses"]
+
+
 def write_all(entries, public_dir, base_url):
-    """Every leaf page, the year and list pages, and the sitemap."""
+    """Every leaf page, both kinds, the year and list pages, and the sitemap."""
     with open(os.path.join(public_dir, "index.html")) as fh:
         template = fh.read()
     city_times = _city_times(public_dir)
+    moons = _lunar_entries(public_dir)
     ordered = sorted(entries, key=lambda e: e["date"])
     for entry in ordered:
         directory = os.path.join(public_dir, "eclipse", slug(entry))
@@ -379,6 +522,18 @@ def write_all(entries, public_dir, base_url):
         with open(os.path.join(directory, "index.html"), "w") as fh:
             fh.write(render_eclipse(template, entry, base_url,
                                     city_times.get(entry["id"])))
+
+    for entry in moons:
+        directory = os.path.join(public_dir, "lunar", entry["date"])
+        os.makedirs(directory, exist_ok=True)
+        with open(os.path.join(directory, "index.html"), "w") as fh:
+            fh.write(render_lunar(template, entry, base_url))
+    with open(os.path.join(public_dir, "lunar", "index.html"), "w") as fh:
+        fh.write(render_lunar_list(moons, base_url))
+
+    lunar_by_year = {}
+    for entry in moons:
+        lunar_by_year.setdefault(entry["date"][:4], []).append(entry)
 
     by_year = {}
     for entry in ordered:
@@ -392,13 +547,14 @@ def write_all(entries, public_dir, base_url):
         directory = os.path.join(public_dir, "eclipse", year)
         os.makedirs(directory, exist_ok=True)
         with open(os.path.join(directory, "index.html"), "w") as fh:
-            fh.write(render_year(year, by_year[year], base_url, before, after))
+            fh.write(render_year(year, by_year[year], base_url, before, after,
+                                 lunar_by_year.get(year)))
 
     with open(os.path.join(public_dir, "eclipse", "index.html"), "w") as fh:
         fh.write(render_list(ordered, base_url))
     with open(os.path.join(public_dir, "sitemap.xml"), "w") as fh:
-        fh.write(render_sitemap(ordered, base_url))
-    return len(ordered) + len(by_year) + 2
+        fh.write(render_sitemap(ordered, base_url, moons))
+    return len(ordered) + len(moons) + len(by_year) + 3
 
 
 # Standalone: rebuild the pages (and any missing previews) from the index that
@@ -422,6 +578,16 @@ if __name__ == "__main__":
             collection = json.load(fh)
         with open(target, "wb") as out:
             out.write(preview.render(collection, entry))
+        drawn += 1
+
+    import lunar_preview
+    moons = _lunar_entries(public)
+    for entry in moons:
+        target = os.path.join(preview_dir, f"lunar-{entry['id']}.png")
+        if os.path.exists(target):
+            continue
+        with open(target, "wb") as out:
+            out.write(lunar_preview.render(entry))
         drawn += 1
 
     written = write_all(index["eclipses"], public, config.BASE_URL)
