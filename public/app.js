@@ -1160,7 +1160,11 @@ function renderPlace() {
   visibleFrom(pin).then((seen) => {
     if (state.pin !== pin || card.hidden) return;
     const today = new Date().toISOString().slice(0, 10);
-    const next = state.all.find((e) => e.date >= today && seen.has(e.id));
+    // Only an eclipse worth standing outside for: half the Sun gone, or the
+    // real thing. A two-per-cent graze is technically next and worth nothing.
+    const worth = (e) => e.date >= today && seen.has(e.id)
+      && (seen.get(e.id).central || seen.get(e.id).obscuration >= 0.5);
+    const next = state.all.find(worth);
     if (!next) return;
     const what = seen.get(next.id);
     const how = what.durationS
