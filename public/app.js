@@ -1,6 +1,6 @@
 import * as maplibregl from './vendor/maplibre-gl.mjs';
-import { localCircumstances, toUT, shadowOutline, instantField, penumbraEdge,
-         nightPolygon, terminator } from './circumstances.js';
+import { localCircumstances, localInstant, obscurationFrom, toUT, shadowOutline,
+         instantField, penumbraEdge, nightPolygon, terminator } from './circumstances.js';
 
 // OpenFreeMap's styles, quietest first. `dark` here means the paint palette and
 // the panels flip, not that the basemap is literally black.
@@ -118,6 +118,7 @@ const state = {
   playing: false,
   playTimer: null,
   live: false,          // the timeline is showing one instant, not the whole eclipse
+  liveT: null,          // that instant, for the view-from-the-pin disc
   pin: null,            // a place to ask "what is visible from here?"
   visible: null,        // that answer, for every eclipse
   threshold: (() => {
@@ -153,6 +154,10 @@ function buildMap() {
   });
 
   window.__map = map;   // handy for debugging from the console
+
+  // The constructor above already has the style; this settles everything else
+  // that follows from the choice -- the panel theme, the dark-basemap note.
+  applyBasemap({ restyle: false });
 
   // Both credits belong here rather than in a panel: a panel scrolls, and on a
   // phone it can be shut altogether, so anything kept only in there is
@@ -464,7 +469,11 @@ function applyBasemap({ restyle = true } = {}) {
   // The shadow is drawn as darkness, which a dark basemap simply absorbs.
   if ($('dark-note')) $('dark-note').hidden = !chosen.dark;
   state.theme = chosen.dark ? 'dark' : 'light';
-  document.documentElement.dataset.theme = state.theme;   // panels follow the map
+  // The overlays above follow the basemap, but the panels follow the system:
+  // a dark basemap forces them dark to match it, a light one leaves the
+  // stylesheet's prefers-color-scheme rules to decide.
+  if (chosen.dark) document.documentElement.dataset.theme = 'dark';
+  else delete document.documentElement.dataset.theme;
   if (restyle) map.setStyle(styleUrl(chosen.id));         // style.load re-adds ours
 }
 
@@ -601,6 +610,8 @@ function setShadowAt(fraction, showing = true) {
                     geometry: { type: 'Point', coordinates: [centre.lon, centre.lat] } });
   }
   setShadow({ type: 'FeatureCollection', features });
+  state.liveT = showing ? t : null;
+  updateEye();
   setLive(showing);
 
   const date = state.current?.date;
@@ -623,6 +634,7 @@ function setShadow(fc) {
 function setLive(on) {
   if (state.live === on) return;
   state.live = on;
+  if (!on) { state.liveT = null; updateEye(); }
   const mode = state.settings.mode;
   const set = (layer, prop, value) => {
     if (map.getLayer(layer)) map.setPaintProperty(layer, prop, value);
@@ -640,6 +652,101 @@ function setLive(on) {
   const source = map.getSource('live');
   if (source) (on ? source.play : source.pause).call(source);
   $('tl-stop').hidden = !on;
+}
+
+// ------------------------------------------------ the view from the pin
+//
+// While the shadow is running and a place is pinned, a small disc of sky in the
+// corner shows the Sun and Moon as they stand from that place at that moment.
+// Orientation is equatorial -- celestial north up, east to the left, the way a
+// sky chart is drawn -- not the tilt of the local horizon.
+const EYE_DAY = [0x63, 0x9e, 0xd2];
+const EYE_DUSK = [0x0d, 0x14, 0x26];
+
+function updateEye() {
+  const host = $('eye');
+  if (!host) return;
+  const t = state.liveT;
+  const el = state.elements;
+  if (t === null || !el || !state.pin) { host.hidden = true; return; }
+  const v = localInstant(el, state.pin.lat, state.pin.lon, t);
+
+  const canvas = $('eye-canvas');
+  const ctx = canvas.getContext('2d');
+  const size = canvas.width;
+  const cx = size / 2, cy = size / 2, edge = size / 2;
+  ctx.clearRect(0, 0, size, size);
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, edge, 0, 2 * Math.PI);
+  ctx.clip();
+
+  let label = '';
+  if (!v.up) {
+    ctx.fillStyle = '#070b14';
+    ctx.fillRect(0, 0, size, size);
+    label = 'Sun below the horizon';
+  } else {
+    const c = Math.max(v.ratio, 1e-3);
+    const o = obscurationFrom(v.magnitude, c);
+    const total = v.separation <= c - 1;
+    const annular = c < 1 && v.separation <= 1 - c;
+
+    // Daylight holds until nearly the end, then goes all at once -- the fourth
+    // power is the same judgement the map's live shading makes.
+    const k = total ? 1 : Math.min(1, o ** 4);
+    const mix = (i) => Math.round(EYE_DAY[i] + (EYE_DUSK[i] - EYE_DAY[i]) * k);
+    ctx.fillStyle = `rgb(${mix(0)},${mix(1)},${mix(2)})`;
+    ctx.fillRect(0, 0, size, size);
+
+    // The Sun fills a third of the disc, so first and last contact fall just
+    // inside the rim and the Moon slides in through it rather than popping up.
+    const R = edge * 0.34;
+    if (!total) {
+      const glare = ctx.createRadialGradient(cx, cy, R * 0.5, cx, cy, R * 2.4);
+      glare.addColorStop(0, 'rgba(255,244,214,.5)');
+      glare.addColorStop(1, 'rgba(255,244,214,0)');
+      ctx.fillStyle = glare;
+      ctx.fillRect(0, 0, size, size);
+    }
+    const sun = ctx.createRadialGradient(cx - R * 0.2, cy - R * 0.2, R * 0.2, cx, cy, R);
+    sun.addColorStop(0, '#fff8dc');
+    sun.addColorStop(1, '#fbbf24');
+    ctx.fillStyle = sun;
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, 2 * Math.PI);
+    ctx.fill();
+
+    // Canvas y runs down and a sky chart puts east on the left, so both axes flip.
+    const d = Math.hypot(v.east, v.north) || 1;
+    const mx = cx - (v.east / d) * v.separation * R;
+    const my = cy - (v.north / d) * v.separation * R;
+    if (total) {
+      // the corona: the one sight the map itself cannot show
+      const halo = ctx.createRadialGradient(mx, my, R * c * 0.95, mx, my, R * c * 2);
+      halo.addColorStop(0, 'rgba(228,238,255,.95)');
+      halo.addColorStop(0.4, 'rgba(196,212,240,.35)');
+      halo.addColorStop(1, 'rgba(196,212,240,0)');
+      ctx.fillStyle = halo;
+      ctx.fillRect(0, 0, size, size);
+    }
+    ctx.fillStyle = '#0d1117';
+    ctx.beginPath();
+    ctx.arc(mx, my, R * c, 0, 2 * Math.PI);
+    ctx.fill();
+
+    label = total ? 'Totality'
+      : annular ? 'Annular'
+      : o >= 0.005 ? `${Math.round(o * 100)}% covered`
+      : '';
+  }
+  ctx.restore();
+
+  const caption = $('eye-label');
+  if (caption.textContent !== label) caption.textContent = label;
+  host.setAttribute('aria-label',
+    `The Sun from the pinned place: ${label || 'not yet eclipsed'}`);
+  host.hidden = false;
 }
 
 // A real eclipse shadow is neutral, and faithfully drawn it is also nearly
@@ -817,6 +924,7 @@ async function elementsForAll() {
 function setPin(lngLat, { push = true } = {}) {
   state.pin = lngLat ? { lat: lngLat.lat, lon: lngLat.lng ?? lngLat.lon } : null;
   drawPin();
+  updateEye();
   if (push) syncUrl();
   const bar = $('pinbar');
   const chips = $('place-threshold');
@@ -1541,7 +1649,6 @@ async function boot() {
     return;
   }
 
-  document.documentElement.dataset.theme = 'light';
   state.version = index.version || '';
   state.all = index.eclipses;
   for (const e of state.all) {

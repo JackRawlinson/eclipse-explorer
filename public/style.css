@@ -15,6 +15,11 @@
   --penumbra: #64748b;
   --greatest: #dc2626;
   --panel-w: 21rem;
+  /* What shows around the globe: the map canvas is transparent past the sphere,
+     so this is the sky the globe hangs in. Invisible on the flat map. */
+  --space: #dfeaf3;
+  /* MapLibre's zoom glyphs are baked-in dark images; this flips them to match. */
+  --ctrl-icon-filter: none;
 }
 
 /* Dark twice over: once for the system setting, once for the in-map toggle, which
@@ -33,6 +38,8 @@
     --annular: #fb923c;
     --penumbra: #94a3b8;
     --greatest: #f87171;
+    --space: #05080f;
+    --ctrl-icon-filter: invert(1);
   }
 }
 
@@ -49,6 +56,8 @@
   --annular: #fb923c;
   --penumbra: #94a3b8;
   --greatest: #f87171;
+  --space: #05080f;
+  --ctrl-icon-filter: invert(1);
 }
 
 * { box-sizing: border-box; }
@@ -62,7 +71,42 @@ html, body {
   background: var(--bg-sunk);
 }
 
-#map { position: absolute; inset: 0; }
+#map { position: absolute; inset: 0; background: var(--space); }
+
+/* The view from the pinned place while the shadow runs: a small disc of sky in
+   the corner, clear of the zoom controls. The canvas draws its own circle, so
+   the box only has to sit still and cast the shadow. */
+.eye {
+  position: absolute;
+  z-index: 3;
+  top: .75rem;
+  right: 3.5rem;
+  display: grid;
+  justify-items: center;
+  gap: .3rem;
+  pointer-events: none;
+}
+.eye canvas {
+  width: 7.5rem;
+  height: 7.5rem;
+  border-radius: 50%;
+  box-shadow: var(--shadow);
+}
+.eye__label {
+  font-size: .72rem;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--bg);
+  padding: .1rem .55rem;
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+  font-variant-numeric: tabular-nums;
+}
+.eye__label:empty { display: none; }
+.eye[hidden] { display: none; }   /* display:grid above would beat the UA rule */
+@media (max-width: 46rem), (max-height: 34rem) {
+  .eye canvas { width: 5.5rem; height: 5.5rem; }
+}
 
 .visually-hidden {
   position: absolute; width: 1px; height: 1px; margin: -1px;
@@ -472,6 +516,10 @@ html, body {
 
 /* ------------------------------------------------------- map control buttons */
 
+/* Stock MapLibre paints the group white; the buttons read var(--ink), so the
+   two have to agree about which theme they are in. */
+.maplibregl-ctrl-group { background: var(--bg); }
+.maplibregl-ctrl button .maplibregl-ctrl-icon { filter: var(--ctrl-icon-filter); }
 .maplibregl-ctrl-group .map-btn {
   width: 30px; height: 30px;
   color: var(--ink);

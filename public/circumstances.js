@@ -467,6 +467,30 @@ export function obscurationFrom(magnitude, ratio) {
 }
 
 /**
+ * How the two discs stand from lat/lon at the single instant `t`: the Moon's
+ * apparent size and offset with the Sun's radius as the unit, and the direction
+ * it lies in on the fundamental plane (xi east, eta north). Presentation only,
+ * for drawing the view -- the verified numbers come from localCircumstances.
+ */
+export function localInstant(el, lat, lon, t) {
+  const st = stateAt(el, t);
+  const o = observer(el, st, lat, lon);
+  const l1p = st.l1 - o.zeta * el.tanf1;
+  const l2p = st.l2 - o.zeta * el.tanf2;
+  const east = st.x - o.xi;
+  const north = st.y - o.eta;
+  const sep = Math.hypot(east, north);
+  return {
+    up: o.zeta >= -HORIZON_TOL,
+    ratio: (l1p - l2p) / (l1p + l2p),      // Moon diameter over Sun diameter
+    separation: 2 * sep / (l1p + l2p),     // centre to centre, in Sun radii
+    east,
+    north,
+    magnitude: (l1p - sep) / (l1p + l2p),
+  };
+}
+
+/**
  * What is seen from lat/lon. Returns null where the eclipse misses the place.
  * Times are TDT hours from the elements' t0; use `toUT` to read them off a clock.
  */
