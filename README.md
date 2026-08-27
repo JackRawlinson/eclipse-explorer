@@ -1,5 +1,7 @@
 # Eclipse Mapper
 
+**Live at [eclipse-explorer.pages.dev](https://eclipse-explorer.pages.dev)**
+
 Every solar eclipse from 1900 to 2100 on an interactive map: the path of totality
 or annularity, how much of the Sun goes anywhere else, and — click anywhere — the
 local contact times. Static files, no backend, no ads, no tracking.
@@ -16,8 +18,8 @@ images, so they stay sharp at every zoom level.
 - **Click the map** for that spot's local circumstances: how much of the Sun goes,
   when the partial phase runs, and inside the path, how long totality lasts there.
 - **← / →** step through eclipses, **/** focuses the search box.
-- The URL carries the selection (`?e=20260812`), so views are linkable and the
-  back button works.
+- The URL carries the selection (`/eclipse/2026-08-12/`), so views are linkable
+  and the back button works. The older `?e=20260812` form still resolves.
 - Buttons top right: refit to the eclipse, cycle the basemap, flat map or globe,
   and smooth shading or stepped contour bands. The globe is worth reaching for on
   polar paths — Web Mercator cuts off above 85°.

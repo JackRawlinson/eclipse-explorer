@@ -2,4 +2,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://eclipse.tsbf.uk/sitemap.xml
+Sitemap: https://eclipse-explorer.pages.dev/sitemap.xml

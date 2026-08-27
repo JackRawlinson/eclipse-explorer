@@ -71,7 +71,7 @@ echo "Deploying $FILES files from public/ to $NAME"
 # fixed paths and passed while 453 of 454 eclipses were missing, because one of
 # the nine happened to be the file that survived. Sampling at random across each
 # kind of file is the difference between a check and the appearance of one.
-SITE="${CF_PAGES_SITE:-https://eclipse.tsbf.uk}"
+SITE="${CF_PAGES_SITE:-https://eclipse-explorer.pages.dev}"
 
 sample_paths() {
   printf '%s\n' / /app.js /style.css /circumstances.js /data/index.json \
@@ -132,11 +132,7 @@ echo "  all $(wc -l < "$REPORT") sampled paths served"
 
 cat <<DONE
 
-Deployed and answering. The project is served at https://$NAME.pages.dev
-
-For eclipse.tsbf.uk: Cloudflare dashboard -> Workers & Pages -> $NAME ->
-Custom domains -> Set up a custom domain. The DNS record is rewritten for
-you, so whatever eclipse.tsbf.uk points at now is replaced.
+Deployed and answering at $SITE
 
 public/_headers carries the caching and MIME rules; it is read at deploy
 time and is not served.
