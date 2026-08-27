@@ -427,7 +427,14 @@ ul.facts__cities li {
 }
 @media (prefers-color-scheme: dark) { .map-btn { color: #ddd; } }
 
-.maplibregl-ctrl-attrib { font-size: 10px; }
+/* Stock MapLibre paints this bar translucent white while the text inherits the
+   theme's ink -- in dark mode that was light-on-light. Both now follow the
+   theme. Doubled selector: the vendor rule carries two classes, so one loses. */
+.maplibregl-ctrl.maplibregl-ctrl-attrib {
+  font-size: 10px;
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
+  color: var(--ink-dim);
+}
 .maplibregl-ctrl-attrib a { color: inherit; }
 
 /* --------------------------------------------------------------- loading */
