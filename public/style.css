@@ -136,6 +136,29 @@ body.has-timeline .place { bottom: 6.4rem; }
   font-size: 1rem; line-height: 1; cursor: pointer;
 }
 .place__close:hover { background: var(--bg-sunk); color: var(--ink); }
+.pop__link {
+  font: inherit; padding: 0; border: 0; background: none; cursor: pointer;
+  color: var(--accent); text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+.pop__link:hover { text-decoration-style: solid; }
+
+/* Word from a button press: floats above the timeline, minds its own business. */
+.toast {
+  position: absolute;
+  left: 50%; bottom: 7.6rem;
+  transform: translateX(-50%);
+  z-index: 6;
+  max-width: min(30rem, calc(100vw - 2rem));
+  overflow-wrap: anywhere;
+  background: var(--ink); color: var(--bg);
+  font-size: .8rem; font-weight: 500;
+  padding: .45rem .95rem; border-radius: 999px;
+  box-shadow: var(--shadow);
+  opacity: 0; transition: opacity .18s;
+  pointer-events: none;
+}
+.toast.is-on { opacity: 1; }
 @media (max-width: 46rem), (max-height: 34rem) {
   /* The sheet owns the bottom of a phone; the card moves to the top left and is
      capped to the strip the sheet leaves free (it can take 68vh, plus the

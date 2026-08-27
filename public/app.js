@@ -207,6 +207,10 @@ const ICONS = {
        + '<path d="M12 3c2.6 2.5 4 5.6 4 9s-1.4 6.5-4 9c-2.6-2.5-4-5.6-4-9s1.4-6.5 4-9z"/>',
   flat: '<rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="M3 10h18M9 5v14"/>',
   cog: '<circle cx="12" cy="12" r="3.1"/><path d="M19.4 14.5a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5v.2a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H2.8a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h.1A1.7 1.7 0 0 0 10 3.7v-.2a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.5 1h.2a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+  share: '<circle cx="17.5" cy="5.5" r="2.5"/><circle cx="6.5" cy="12" r="2.5"/>'
+       + '<circle cx="17.5" cy="18.5" r="2.5"/><path d="M8.8 10.9l6.4-4.2M8.8 13.1l6.4 4.2"/>',
+  calendar: '<rect x="3.5" y="5" width="17" height="15.5" rx="2"/>'
+          + '<path d="M3.5 9.5h17M8 2.8v4M16 2.8v4M7.5 13.5h3M13.5 13.5h3M7.5 17h3"/>',
 };
 
 function buttonGroup() {
@@ -217,6 +221,9 @@ function buttonGroup() {
       div.append(
         mapButton('refit', 'Refit the map to this eclipse', () => fitToCurrent()),
         mapButton('globe', 'Switch between the flat map and a globe', toggleGlobe, 'globe'),
+        mapButton('share', 'Copy a link to this view', shareView),
+        mapButton('calendar', 'Save this eclipse to your calendar, for the picked place',
+                  downloadCalendar),
         mapButton('cog', 'Display settings', toggleSettings, 'settings'),
         mapButton('help', 'What this is, and what you can do with it', showIntro),
       );
@@ -576,6 +583,7 @@ function showTimeline(entry) {
   // The sheet needs to know to leave room for it; see the mobile rule.
   document.body.classList.toggle('has-timeline', !!state.shadowWindow);
   updateScrubMarks();
+  syncUrl({ replace: true });   // a moment shown on the last eclipse is not this one's
   if (!state.shadowWindow) {
     setShadow(null);
     return;
@@ -723,9 +731,8 @@ function setLive(on) {
 // ------------------------------------------------ the view from the pin
 //
 // While the shadow is running and a place is pinned, a small disc of sky in the
-// corner shows the Sun and Moon as they stand from that place at that moment.
-// Orientation is equatorial -- celestial north up, east to the left, the way a
-// sky chart is drawn -- not the tilt of the local horizon.
+// corner shows the Sun and Moon as they stand from that place at that moment,
+// the way the person standing there sees it: zenith up, horizon level.
 const EYE_DAY = [0x63, 0x9e, 0xd2];
 const EYE_DUSK = [0x0d, 0x14, 0x26];
 
@@ -780,10 +787,18 @@ function updateEye() {
   ctx.arc(cx, cy, R, 0, 2 * Math.PI);
   ctx.fill();
 
-  // Canvas y runs down and a sky chart puts east on the left, so both axes flip.
+  // The view stands the way the viewer does: zenith up, horizon level. The
+  // Moon's offset comes out of the geometry with celestial north up, so it is
+  // rotated by the angle between north and the local vertical.
+  const zl = Math.hypot(v.zenithEast, v.zenithNorth);
+  const zx = zl > 1e-6 ? -v.zenithEast / zl : 0;    // zenith, canvas axes
+  const zy = zl > 1e-6 ? -v.zenithNorth / zl : -1;
+  const phi = Math.atan2(zx, -zy);
   const d = Math.hypot(v.east, v.north) || 1;
-  const mx = cx - (v.east / d) * v.separation * R;
-  const my = cy - (v.north / d) * v.separation * R;
+  const ox = -(v.east / d) * v.separation * R;      // north-up offset...
+  const oy = -(v.north / d) * v.separation * R;
+  const mx = cx + ox * Math.cos(phi) + oy * Math.sin(phi);   // ...stood upright
+  const my = cy + oy * Math.cos(phi) - ox * Math.sin(phi);
   if (total) {
     // the corona: the one sight the map itself cannot show
     const halo = ctx.createRadialGradient(mx, my, R * c * 0.95, mx, my, R * c * 2);
@@ -798,35 +813,28 @@ function updateEye() {
   ctx.arc(mx, my, R * c, 0, 2 * Math.PI);
   ctx.fill();
 
-  // The ground. The view is glued to the Sun, so it is the horizon that moves:
-  // as the Sun drops the ground climbs the disc and finally rides over it. The
-  // altitude scale is deliberately compressed -- to true scale the horizon
-  // would only enter this narrow a view for the last fraction of a degree --
-  // and its tilt is the real one, taken from where the zenith lies.
+  // The ground, level across the bottom as a person standing there has it.
+  // The view is glued to the Sun, so it is the horizon that moves: as the Sun
+  // drops the ground climbs the disc and finally rides over it. The altitude
+  // scale is deliberately compressed -- to true scale the horizon would only
+  // enter this narrow a view for the last fraction of a degree.
   if (alt < 10) {
-    const zl = Math.hypot(v.zenithEast, v.zenithNorth);
-    const zx = zl > 1e-6 ? -v.zenithEast / zl : 0;   // zenith on the canvas
-    const zy = zl > 1e-6 ? -v.zenithNorth / zl : -1;
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate(Math.atan2(zx, -zy));
-    const yH = (alt / 10) * edge;
-    const ground = ctx.createLinearGradient(0, yH, 0, edge * 1.2);
+    const yH = cy + (alt / 10) * edge;
+    const ground = ctx.createLinearGradient(0, yH, 0, cy + edge * 1.2);
     ground.addColorStop(0, '#232d28');
     ground.addColorStop(1, '#0c110e');
     ctx.fillStyle = ground;
-    ctx.fillRect(-size, yH, 2 * size, 2 * size);
+    ctx.fillRect(0, yH, size, size);
     // the last light along the horizon, when the Sun is near it
     const glow = Math.max(0, 1 - Math.abs(alt) / 6) * (1 - o * 0.85);
     if (glow > 0.02) {
       ctx.strokeStyle = `rgba(255,196,130,${(0.65 * glow).toFixed(3)})`;
       ctx.lineWidth = 2.5;
       ctx.beginPath();
-      ctx.moveTo(-size, yH);
+      ctx.moveTo(0, yH);
       ctx.lineTo(size, yH);
       ctx.stroke();
     }
-    ctx.restore();
   }
 
   // 100% belongs to totality alone; the seconds either side of it are a 99.9%
@@ -955,6 +963,7 @@ function stopLive() {
   setShadow(null);
   $('tl-scrub').value = '0';
   $('tl-time').textContent = '\u2014';
+  syncUrl({ replace: true });     // no moment showing, so none in the address
 }
 
 function startPlaying() {
@@ -1065,33 +1074,47 @@ function drawPin() {
     .addTo(map);
 }
 
+// One scan of all 454 eclipses from one place, cached by place: the filter,
+// the card's "next from here" line, and any repeat visit share the same work.
+let placeScan = { key: null, promise: null };
+
+function visibleFrom(pin) {
+  const key = `${pin.lat.toFixed(4)},${pin.lon.toFixed(4)}`;
+  if (placeScan.key === key) return placeScan.promise;
+  placeScan = {
+    key,
+    promise: elementsForAll().then((elements) => {
+      const seen = new Map();
+      for (const entry of state.all) {
+        const el = elements[entry.id];
+        if (!el) continue;
+        const r = localCircumstances(el, pin.lat, pin.lon);
+        if (!r || r.obscuration <= 0) continue;
+        seen.set(entry.id, {
+          obscuration: r.obscuration,
+          central: r.central,
+          total: r.total,
+          durationS: r.durationS ?? null,
+        });
+      }
+      return seen;
+    }),
+  };
+  return placeScan.promise;
+}
+
 async function computeVisible() {
   const pin = state.pin;
   $('count').textContent = 'working out what is visible…';
-
-  let elements;
+  let seen;
   try {
-    elements = await elementsForAll();
+    seen = await visibleFrom(pin);
   } catch (err) {
     $('count').textContent = 'Could not load the eclipse elements.';
     console.error(err);
     return;
   }
   if (state.pin !== pin) return;                 // moved on already
-
-  const seen = new Map();
-  for (const entry of state.all) {
-    const el = elements[entry.id];
-    if (!el) continue;
-    const r = localCircumstances(el, pin.lat, pin.lon);
-    if (!r || r.obscuration <= 0) continue;
-    seen.set(entry.id, {
-      obscuration: r.obscuration,
-      central: r.central,
-      total: r.total,
-      durationS: r.durationS ?? null,
-    });
-  }
   state.visible = seen;
   applyFilters();
 }
@@ -1125,11 +1148,30 @@ function renderPlace() {
   const card = $('place');
   if (!card) return;
   if (!state.pin) { card.hidden = true; return; }
-  const lngLat = { lat: state.pin.lat, lng: state.pin.lon };
+  const pin = state.pin;
+  const lngLat = { lat: pin.lat, lng: pin.lon };
   $('place-body').innerHTML = state.elements
     ? circumstancesHTML(localCircumstances(state.elements, lngLat.lat, lngLat.lng), lngLat)
     : `<p class="pop__where">${formatLatLon(lngLat.lat, lngLat.lng, 3)}</p>`;
   card.hidden = false;
+
+  // The next eclipse this place will see, filled in once the scan is done.
+  // The scan is shared with (and cached for) the visible-from-here filter.
+  visibleFrom(pin).then((seen) => {
+    if (state.pin !== pin || card.hidden) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const next = state.all.find((e) => e.date >= today && seen.has(e.id));
+    if (!next) return;
+    const what = seen.get(next.id);
+    const how = what.durationS
+      ? `${what.total ? 'totality' : 'annularity'} ${formatDuration(what.durationS)}`
+      : `${formatObscuration(what.obscuration)} covered`;
+    const row = document.createElement('p');
+    row.className = 'pop__note pop__next';
+    row.innerHTML = `Next from here: <button type="button" class="pop__link" `
+      + `data-next="${next.id}">${formatDate(next.date)}</button> — ${how}`;
+    $('place-body').append(row);
+  }).catch(() => { /* the card stands without it */ });
 }
 
 function circumstancesHTML(s, lngLat) {
@@ -1176,6 +1218,77 @@ function circumstancesHTML(s, lngLat) {
     + '</dl>'
     + (notes.length ? `<p class="pop__note">${notes.join('; ')}.</p>` : '')
     + where;
+}
+
+// ------------------------------------------------------ sharing the view
+
+let toastTimer = null;
+function toast(message) {
+  let el = $('toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'toast';
+    el.className = 'toast';
+    el.setAttribute('role', 'status');
+    document.body.append(el);
+  }
+  el.textContent = message;
+  el.classList.add('is-on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('is-on'), 2200);
+}
+
+async function shareView() {
+  syncUrl({ replace: true });     // catch the moment playback is sitting on
+  const url = location.href;
+  if (navigator.share) {
+    try { await navigator.share({ title: document.title, url }); return; }
+    catch { return; }             // the person closed the sheet; that is an answer
+  }
+  try { await navigator.clipboard.writeText(url); toast('Link copied'); }
+  catch { toast(url); }           // clipboard refused: show it to copy by hand
+}
+
+/** An .ics for the picked place: the eclipse there, first to last contact. */
+function downloadCalendar() {
+  if (!state.pin) { toast('Click the map to pick a place first'); return; }
+  if (!state.elements || !state.current) return;
+  const r = localCircumstances(state.elements, state.pin.lat, state.pin.lon);
+  if (!r) { toast('No eclipse visible from the picked place'); return; }
+  const el = state.elements;
+  const date = state.current.date;
+  const ref = toUT(el, r.tMax);
+  const when = (t) => instantFor(date, toUT(el, t), ref);
+  const stamp = (d) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  const clean = (s) => s.replace(/[\\;,]/g, ' ');
+  const summary = r.durationS
+    ? `Solar eclipse — ${r.total ? 'totality' : 'annularity'} ${formatDuration(r.durationS)}`
+    : `Solar eclipse — ${formatObscuration(r.obscuration)} of the Sun covered`;
+  const detail = [
+    `Maximum ${hms(toUT(el, r.tMax), true)} UT`,
+    r.durationS
+      ? `${r.total ? 'totality' : 'annularity'} ${hms(toUT(el, r.c2), true)}–${hms(toUT(el, r.c3), true)} UT`
+      : null,
+    location.href,
+  ].filter(Boolean).join(' — ');
+  const ics = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Eclipse Mapper//EN',
+    'BEGIN:VEVENT',
+    `UID:${state.current.id}-${state.pin.lat.toFixed(2)}-${state.pin.lon.toFixed(2)}@eclipse-mapper`,
+    `DTSTAMP:${stamp(new Date())}`,
+    `DTSTART:${stamp(when(r.c1 ?? r.tMax))}`,
+    `DTEND:${stamp(when(r.c4 ?? r.tMax))}`,
+    `SUMMARY:${clean(summary)}`,
+    `DESCRIPTION:${clean(detail)}`,
+    `GEO:${state.pin.lat.toFixed(4)};${state.pin.lon.toFixed(4)}`,
+    'END:VEVENT', 'END:VCALENDAR',
+  ].join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([ics], { type: 'text/calendar' }));
+  a.download = `eclipse-${date}.ics`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  toast('Calendar event saved');
 }
 
 const LOCAL_ZONE = (() => {
@@ -1293,6 +1406,14 @@ async function select(id, { fit = true, push = true, replace = false } = {}) {
 function syncUrl({ replace = false } = {}) {
   const q = new URLSearchParams();
   if (state.pin) q.set('at', `${state.pin.lat.toFixed(4)},${state.pin.lon.toFixed(4)}`);
+  // A shown moment goes into the address as its UT clock time, so a shared
+  // link opens mid-eclipse. Only written when the timeline is showing one --
+  // and only on a pause or a scrub, never per frame of playback.
+  if (state.live && state.liveT !== null && state.elements) {
+    const s = Math.round(toUT(state.elements, state.liveT) * 3600);
+    q.set('t', [3600, 60, 1].map((d, i) =>
+      String(Math.floor(s / d) % (i ? 60 : 24)).padStart(2, '0')).join(''));
+  }
   const query = q.toString();
   const path = state.current ? `/eclipse/${state.current.date}/` : '/';
   const url = query ? `${path}?${query}` : path;
@@ -1308,6 +1429,24 @@ function pinFromUrl() {
   if (!at) return null;
   const [lat, lon] = at.split(',').map(Number);
   return Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lng: lon } : null;
+}
+
+/** Put the timeline where a shared link's ?t=HHMMSS (UT) said it was. The raw
+    value is captured before boot's select() rewrites the address. */
+function applyMoment(raw) {
+  const win = state.shadowWindow;
+  const el = state.elements;
+  if (!raw || !win || !el || !/^\d{6}$/.test(raw)) return;
+  const ut = Number(raw.slice(0, 2)) + Number(raw.slice(2, 4)) / 60 + Number(raw.slice(4)) / 3600;
+  // toUT is t plus a constant, mod 24 -- so invert it and pick the day's copy
+  // that lands nearest the crossing.
+  let t = ut - el.t0 + el.deltaT / 3600;
+  const mid = (win[0] + win[1]) / 2;
+  t += 24 * Math.round((mid - t) / 24);
+  const fraction = (t - win[0]) / (win[1] - win[0]);
+  if (fraction < 0 || fraction > 1) return;
+  $('tl-scrub').value = String(Math.round(fraction * 1000));
+  setShadowAt(fraction);
 }
 
 function fitTo(entry) {
@@ -1717,6 +1856,15 @@ function wireKeys() {
     if (typing) return;
     if (ev.key === 'ArrowLeft') { ev.preventDefault(); step(-1); }
     if (ev.key === 'ArrowRight') { ev.preventDefault(); step(1); }
+    if (ev.key === ' ' && !$('timeline').hidden) {
+      ev.preventDefault();          // the page must not scroll under the map
+      if (state.playing) {
+        stopPlaying();
+        syncUrl({ replace: true }); // pausing pins the moment into the address
+      } else {
+        startPlaying();
+      }
+    }
   });
 }
 
@@ -1803,10 +1951,20 @@ async function boot() {
   $('tl-scrub').addEventListener('input', (ev) => {
     stopPlaying();
     setShadowAt(Number(ev.target.value) / 1000);
+    syncUrl({ replace: true });   // a scrubbed-to moment is a linkable one
   });
   $('tl-stop').addEventListener('click', stopLive);
   $('tl-play').addEventListener('click', () => {
-    if (state.playing) stopPlaying(); else startPlaying();
+    if (state.playing) {
+      stopPlaying();
+      syncUrl({ replace: true }); // pausing pins the moment into the address
+    } else {
+      startPlaying();
+    }
+  });
+  $('place-body')?.addEventListener('click', (ev) => {
+    const id = ev.target?.dataset?.next;
+    if (id) select(id);
   });
   $('search').addEventListener('input', (ev) => {
     state.query = ev.target.value;
@@ -1840,11 +1998,14 @@ async function boot() {
   // Read the pin before selecting: select() rewrites the URL from state, and
   // would drop `at=` before we ever looked at it.
   const startPin = pinFromUrl();
+  const startMoment = new URLSearchParams(location.search).get('t');
   const start = idFromUrl() || defaultId();
-  select(start, { replace: true, fit: false });
+  const selected = select(start, { replace: true, fit: false });
   map.once('load', () => {
     fitToCurrent();
     if (startPin) setPin(startPin, { push: false });
+    // Only once both the eclipse and the map are in: the moment draws layers.
+    selected.then(() => applyMoment(startMoment));
   });
 }
 
