@@ -6,8 +6,8 @@
      otherwise move what relative URLs resolve against. -->
 <base href="/">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Eclipse Mapper — solar eclipse paths 1900–2100</title>
-<meta name="description" content="Every solar eclipse from 1900 to 2100 on an interactive map. Paths of totality and annularity computed from NASA's Besselian elements. No ads, no tracking.">
+<title>Eclipse Mapper — solar and lunar eclipses 1900–2100</title>
+<meta name="description" content="Every solar and lunar eclipse from 1900 to 2100 on an interactive map. Paths of totality, annularity and lunar visibility computed from NASA's published elements. No ads, no tracking.">
 <meta name="color-scheme" content="light dark">
 <link rel="canonical" href="https://eclipse-explorer.pages.dev/">
 
@@ -16,8 +16,8 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Eclipse Mapper">
 <meta property="og:url" content="https://eclipse-explorer.pages.dev/">
-<meta property="og:title" content="Eclipse Mapper — solar eclipse paths 1900–2100">
-<meta property="og:description" content="Every solar eclipse from 1900 to 2100 on an interactive map. Paths of totality and annularity computed from NASA's Besselian elements. No ads, no tracking.">
+<meta property="og:title" content="Eclipse Mapper — solar and lunar eclipses 1900–2100">
+<meta property="og:description" content="Every solar and lunar eclipse from 1900 to 2100 on an interactive map. Paths of totality, annularity and lunar visibility computed from NASA's published elements. No ads, no tracking.">
 <meta property="og:image" content="https://eclipse-explorer.pages.dev/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -32,7 +32,7 @@
 <!-- The page is a map, so its heading has nowhere to sit visually. It still
      needs one: it is the only thing telling a reader or a crawler what this is
      before any of the interface makes sense. -->
-<h1 class="sr-only">Solar eclipse paths, 1900 to 2100</h1>
+<h1 class="sr-only">Solar and lunar eclipses, 1900 to 2100</h1>
 
 <div id="map" role="application" aria-label="Map of solar eclipse paths"></div>
 
@@ -54,6 +54,12 @@
 
   <div class="panel__body">
     <div class="picker">
+      <div class="modeswitch" role="group" aria-label="Which kind of eclipse">
+        <button type="button" class="modeswitch__btn" id="mode-solar"
+                aria-pressed="true">☀ Solar</button>
+        <button type="button" class="modeswitch__btn" id="mode-lunar"
+                aria-pressed="false">☾ Lunar</button>
+      </div>
       <div class="pinbar" id="pinbar" hidden>
         <span class="pinbar__at" id="pinbar-at"></span>
         <button type="button" class="pinbar__clear" id="place-clear"
@@ -133,9 +139,10 @@
 </aside>
 
 <dialog class="intro" id="intro">
-  <h2>Solar eclipses, 1900&ndash;2100</h2>
-  <p class="intro__lead">Every solar eclipse for two centuries, each one drawn on
-    the map with the ground it passes over.</p>
+  <h2>Eclipses, 1900&ndash;2100</h2>
+  <p class="intro__lead">Every solar and lunar eclipse for two centuries &mdash;
+    the Sun&rsquo;s shadow drawn on the ground it crosses, the Moon&rsquo;s
+    nights shown where they can be seen.</p>
   <ul class="intro__list">
     <li><b>Pick an eclipse</b> from the list, or step through them with the arrows
       &mdash; the <kbd>&larr;</kbd> and <kbd>&rarr;</kbd> keys work too.</li>
@@ -143,7 +150,11 @@
       of the Sun is covered, and how long totality lasts.</li>
     <li><b>Choose a place</b> and the list narrows to the eclipses you could see from
       it &mdash; all of them, or only the ones that go total.</li>
-    <li><b>Press play</b> to watch the shadow and the day/night line cross the Earth.</li>
+    <li><b>Press play</b> to watch the shadow and the day/night line cross the Earth
+      &mdash; and <b>press the little sky disc</b> to stand at your pin and watch the
+      whole thing overhead.</li>
+    <li><b>Lunar too</b>: the ☾ switch at the top of the list swaps to every eclipse
+      of the Moon, with where each one is visible and the Moon turning red.</li>
     <li><b>The cog</b> changes the basemap, the colours, and whether times are shown
       in UT or on your own clock.</li>
   </ul>

@@ -1,6 +1,7 @@
 import * as maplibregl from './vendor/maplibre-gl.mjs';
-import { localCircumstances, localInstant, obscurationFrom, toUT, shadowOutline,
-         instantField, penumbraEdge, nightPolygon, terminator } from './circumstances.js';
+import { localCircumstances, localInstant, localHorizon, obscurationFrom, toUT,
+         shadowOutline, instantField, penumbraEdge, nightPolygon,
+         terminator } from './circumstances.js';
 import * as lunar from './lunar.js';
 
 // OpenFreeMap's styles, quietest first. `dark` here means the paint palette and
@@ -230,9 +231,6 @@ function buttonGroup() {
       div.append(
         mapButton('refit', 'Refit the map to this eclipse', () => fitToCurrent()),
         mapButton('globe', 'Switch between the flat map and a globe', toggleGlobe, 'globe'),
-        mapButton('moon', 'Switch between solar and lunar eclipses', () => {
-          setKind(state.kind === 'lunar' ? 'solar' : 'lunar');
-        }, 'kind'),
         mapButton('share', 'Copy a link to this view', shareView),
         mapButton('calendar', 'Save this eclipse to your calendar, for the picked place',
                   downloadCalendar),
@@ -595,10 +593,15 @@ async function setKind(kind, { push = true } = {}) {
     state.basemapOverride = null;
     applyBasemap();
   }
-  const btn = document.querySelector('.map-btn[data-role="kind"]');
-  if (btn) {
-    btn.setAttribute('aria-pressed', String(kind === 'lunar'));
-    setButtonIcon('kind', kind === 'lunar' ? 'sun' : 'moon');
+  $('mode-solar')?.setAttribute('aria-pressed', String(kind === 'solar'));
+  $('mode-lunar')?.setAttribute('aria-pressed', String(kind === 'lunar'));
+  const hint = document.querySelector('.hint');
+  if (hint) {
+    hint.textContent = kind === 'lunar'
+      ? 'Click anywhere on the map to see which phases of the eclipse that place '
+        + 'gets, and when the Moon rises and sets through it.'
+      : 'Click anywhere on the map to see when the eclipse happens there, how '
+        + 'much of the Sun is covered, and how long totality lasts.';
   }
   state.all = kind === 'lunar' ? state.lunarAll : state.solarAll;
   applyFilters();
@@ -1048,6 +1051,7 @@ function simAdapter(resume) {
            reference: toUT(el, (win[0] + win[1]) / 2) })} ${timeLabel()}`,
     solar: state.kind === 'solar' && el ? {
       instant: (t) => localInstant(el, pin.lat, pin.lon, t),
+      horizon: (t) => localHorizon(el, pin.lat, pin.lon, t),
       obscuration: obscurationFrom,
       circumstances: () => localCircumstances(el, pin.lat, pin.lon),
     } : null,
@@ -1055,8 +1059,16 @@ function simAdapter(resume) {
       geometry: () => lunar.geometryOf(entry),
       phase: (t) => lunar.phaseAt(entry, t),
       alt: (t) => lunar.moonAlt(entry, pin.lat, pin.lon, t),
+      azimuth: (t) => lunar.moonAzimuth(entry, pin.lat, pin.lon, t),
       gamma: entry.gamma,
     } : null,
+    deepest: () => {
+      const [w0, w1] = win;
+      const at = state.kind === 'lunar'
+        ? lunar.geometryOf(entry).g
+        : (localCircumstances(el, pin.lat, pin.lon)?.tMax ?? (w0 + w1) / 2);
+      return Math.min(1, Math.max(0, (at - w0) / (w1 - w0)));
+    },
     commit: (fraction, playing) => {
       $('tl-scrub').value = String(Math.round(fraction * 1000));
       setShadowAt(fraction);
@@ -1894,9 +1906,10 @@ function renderList() {
     frag.append(li);
   }
   ul.replaceChildren(frag);
+  const noun = state.kind === 'lunar' ? 'lunar eclipses' : 'eclipses';
   $('count').textContent = state.visible
     ? `${state.shown.length} visible from here, ${state.span}`
-    : `${state.shown.length} of ${state.all.length} eclipses, ${state.span}`;
+    : `${state.shown.length} of ${state.all.length} ${noun}, ${state.span}`;
   markCurrentInList();
 }
 
@@ -2367,6 +2380,8 @@ async function boot() {
   // not every listener wired after the line that would have thrown.
   $('place-close')?.addEventListener('click', () => setPin(null));
   $('eye-open')?.addEventListener('click', openSim);
+  $('mode-solar')?.addEventListener('click', () => setKind('solar'));
+  $('mode-lunar')?.addEventListener('click', () => setKind('lunar'));
   $('place-visible')?.addEventListener('click', showVisibleFromPin);
   const speedLabel = () => `${state.playRate === 0.5 ? '½' : state.playRate}×`;
   const speedBtn = $('tl-speed');

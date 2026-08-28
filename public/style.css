@@ -162,6 +162,18 @@ html, body {
   cursor: grab;
 }
 .sim--dragging .sim__canvas { cursor: grabbing; }
+.sim__compass { position: absolute; inset: 0; pointer-events: none; }
+.sim__compass span {
+  position: absolute;
+  top: -0.6em; left: -0.5em;   /* transform carries the real position */
+  font-size: .82rem;
+  font-weight: 700;
+  letter-spacing: .05em;
+  color: rgba(226, 232, 240, .85);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, .8);
+}
+.sim__compass span[hidden] { display: none; }
+.sim__deep { font-size: .8rem; padding: .16rem .45rem; }
 .sim__close {
   position: absolute;
   top: .9rem;
@@ -543,6 +555,31 @@ ul.facts__cities li {
   font-size: .85rem; font-weight: 600; font-variant-numeric: tabular-nums;
   padding: .3rem .5rem; text-align: center; min-width: 0;
 }
+
+/* ------------------------------------------------------------ mode switch */
+
+.modeswitch {
+  display: flex;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.modeswitch__btn {
+  flex: 1;
+  border: 0;
+  background: var(--bg);
+  color: var(--ink-dim);
+  font: inherit;
+  font-size: .8rem;
+  font-weight: 600;
+  padding: .32rem .5rem;
+  cursor: pointer;
+}
+.modeswitch__btn[aria-pressed="true"] {
+  background: var(--accent);
+  color: #fff;
+}
+.modeswitch__btn:not([aria-pressed="true"]):hover { background: var(--bg-sunk); color: var(--ink); }
 
 /* ---------------------------------------------------------- search, chips */
 

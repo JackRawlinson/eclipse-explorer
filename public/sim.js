@@ -4,13 +4,12 @@
 // over the same functions the disc uses -- so this view cannot disagree with
 // the map, the card, or the timeline.
 //
-// One frame of honesty about orientation: the site's geometry knows the Sun's
-// altitude and the Moon's offset against the observer's vertical exactly, but
-// not the compass bearing -- so the eclipsed body stands at a nominal azimuth
-// of zero over an anonymous landscape. Everything you can check is real:
-// altitude, the bite's side and roll, the ratio, the contacts, which limb the
-// diamond ring flashes on. Where the mountains are is invented; when the sky
-// goes dark is not.
+// Orientation is real: altitude AND compass azimuth come from the geometry
+// (the Besselian axis's declination and hour angle point at the Sun; the
+// Moon's bearing comes from the point it stands over), so the Sun sets where
+// it truly sets and the compass on the horizon means what it says. The one
+// invention is the landscape itself -- an anonymous seeded ridge, since the
+// site knows nothing of what actually stands on anyone's horizon.
 
 const DEG = Math.PI / 180;
 const SUN_ANG = 0.267 * DEG;          // mean solar semi-diameter
@@ -49,8 +48,9 @@ export function open(adapter) {
   sim.vyaw = 0;
   sim.vpitch = 0;
   sim.fov = 25 * DEG;
-  sim.yaw = 0;
-  sim.pitch = bodyAltitude(sim) * DEG;
+  const aim = bodyAim(sim);
+  sim.yaw = aim.az * DEG;
+  sim.pitch = aim.alt * DEG;
   sim.root.hidden = false;
   sim.recentreBtn.hidden = true;
   sim.hint.classList.remove('is-gone');
@@ -110,6 +110,17 @@ function buildDom() {
   hint.className = 'sim__hint';
   hint.textContent = 'drag to look around · scroll to zoom';
 
+  const compass = document.createElement('div');
+  compass.className = 'sim__compass';
+  const points = {};
+  for (const [letter, az] of [['N', 0], ['E', 90], ['S', 180], ['W', 270]]) {
+    const p = document.createElement('span');
+    p.textContent = letter;
+    p.hidden = true;
+    compass.append(p);
+    points[letter] = { el: p, az: az * DEG };
+  }
+
   const bar = document.createElement('div');
   bar.className = 'sim__bar';
   const playBtn = document.createElement('button');
@@ -128,12 +139,18 @@ function buildDom() {
   speedBtn.type = 'button';
   speedBtn.className = 'sim__speed';
   speedBtn.setAttribute('aria-label', 'Playback speed');
-  bar.append(playBtn, scrub, time, speedBtn);
+  const deepBtn = document.createElement('button');
+  deepBtn.type = 'button';
+  deepBtn.className = 'sim__speed sim__deep';
+  deepBtn.textContent = '◉';
+  deepBtn.title = 'Jump to the deepest moment here';
+  deepBtn.setAttribute('aria-label', 'Jump to the deepest moment here');
+  bar.append(playBtn, scrub, deepBtn, time, speedBtn);
 
-  root.append(canvas, closeBtn, recentreBtn, label, hint, bar);
+  root.append(canvas, compass, closeBtn, recentreBtn, label, hint, bar);
   document.body.append(root);
-  return { root, canvas, closeBtn, recentreBtn, label, hint,
-           bar, playBtn, scrub, time, speedBtn,
+  return { root, canvas, compass, points, closeBtn, recentreBtn, label, hint,
+           bar, playBtn, scrub, time, speedBtn, deepBtn,
            isOpen: false, lastReadout: '', lastLabel: null };
 }
 
@@ -151,7 +168,6 @@ function wireChrome(s) {
   s.recentreBtn.addEventListener('click', () => {
     s.userLooked = false;
     s.recentreBtn.hidden = true;
-    s.yaw = 0;
   });
   s.scrub.addEventListener('input', () => {
     s.playing = false;
@@ -159,6 +175,13 @@ function wireChrome(s) {
     s.fraction = Number(s.scrub.value) / 1000;
   });
   s.scrub.addEventListener('change', () => s.adapter.commit(s.fraction, false));
+  s.deepBtn.addEventListener('click', () => {
+    s.playing = false;
+    setPlayIcon(s);
+    s.fraction = s.adapter.deepest();
+    s.scrub.value = String(Math.round(s.fraction * 1000));
+    s.adapter.commit(s.fraction, false);
+  });
   s.speedBtn.addEventListener('click', () => {
     s.adapter.cyclePlayRate();
     s.speedBtn.textContent = s.adapter.speedLabel();
@@ -507,11 +530,12 @@ function timeAt(s) {
   return w0 + (w1 - w0) * s.fraction;
 }
 
-function bodyAltitude(s) {
-  const t = timeAt(s);
-  return s.adapter.kind === 'lunar'
-    ? s.adapter.lunar.alt(t)
-    : s.adapter.solar.instant(t).altitude;
+function bodyAim(s, t = timeAt(s)) {
+  if (s.adapter.kind === 'lunar') {
+    return { alt: s.adapter.lunar.alt(t), az: s.adapter.lunar.azimuth(t) };
+  }
+  const h = s.adapter.solar.horizon(t);
+  return { alt: h.altitude, az: h.azimuth };
 }
 
 /** The per-instant uniforms and label for the solar sky. */
@@ -544,7 +568,8 @@ function solarUniforms(s, t, dt) {
   const sunAng = SUN_ANG * mag;
 
   const alt = v.altitude * DEG;
-  const S = dirFromAltAz(alt, 0);
+  const az = a.solar.horizon(t).azimuth * DEG;
+  const S = dirFromAltAz(alt, az);
   const tR = norm3(cross([0, 1, 0], S));
   const tU = cross(S, tR);
   const sep = v.separation * sunAng;
@@ -571,7 +596,7 @@ function solarUniforms(s, t, dt) {
     diamond: (total || annular) ? 0 : smootherstep(0.99, 0.9985, v.magnitude),
     chromo: total ? Math.max(0, 1 - totality) : 0,
     umbraOff: [0, 0], umbraAngR: 0, penAngR: 0, umbralMag: 0,
-    bodyAlt: v.altitude, label,
+    bodyAlt: v.altitude, bodyAz: az / DEG, label,
   };
 }
 
@@ -593,7 +618,8 @@ function lunarUniforms(s, t, dt) {
   const moonAng = MOON_ANG * mag;
   const sAng = (MOON_ANG / RM) * mag;          // radians per shadow-frame unit
 
-  const M = dirFromAltAz(alt * DEG, 0);
+  const azM = a.lunar.azimuth(t) * DEG;
+  const M = dirFromAltAz(alt * DEG, azM);
   const label = alt < -0.3 ? 'Moon below the horizon'
     : p.phase === 'total' ? 'Totality'
     : p.phase === 'partial' ? `${Math.min(99, Math.round(p.umbralMag * 100))}% in umbra`
@@ -601,7 +627,7 @@ function lunarUniforms(s, t, dt) {
     : '';
 
   return {
-    mode: 1, sunDir: dirFromAltAz(sunAlt, Math.PI), moonDir: M, flashDir: M,
+    mode: 1, sunDir: dirFromAltAz(sunAlt, azM + Math.PI), moonDir: M, flashDir: M,
     sunAngR: SUN_ANG, moonAngR: moonAng,
     sunAlt, obsc: 1, twilight: 0,
     totality: 0, ring: 0, diamond: 0, chromo: 0,
@@ -610,7 +636,7 @@ function lunarUniforms(s, t, dt) {
     umbraAngR: geo.ru * sAng,
     penAngR: geo.rp * sAng,
     umbralMag: p.umbralMag,
-    bodyAlt: alt, label,
+    bodyAlt: alt, bodyAz: azM / DEG, label,
   };
 }
 
@@ -631,7 +657,8 @@ const smootherstep = (a, b, x) => {
 /** A slow, plausibly-poled diurnal turn for the procedural star field. */
 function starMatrix(s, t) {
   const lat = s.adapter.pin.lat;
-  const pole = dirFromAltAz(Math.abs(lat) * DEG, lat >= 0 ? Math.PI : 0);
+  // the celestial pole stands over true north (or south), at the latitude
+  const pole = dirFromAltAz(Math.abs(lat) * DEG, lat >= 0 ? 0 : Math.PI);
   const ang = ((t * 15) % 360) * DEG;
   const [x, y, z] = pole;
   const c = Math.cos(ang), si = Math.sin(ang), ic = 1 - c;
@@ -664,7 +691,7 @@ function frame(now) {
 
   // follow the body until the person takes the view for themselves
   if (!s.userLooked) {
-    s.yaw = 0;
+    s.yaw = u.bodyAz * DEG;
     s.pitch = clampPitch(Math.max(u.bodyAlt * DEG, 2 * DEG));
   } else if (s.vyaw || s.vpitch) {
     const k = Math.exp(-dt * 6);
@@ -718,6 +745,20 @@ function frame(now) {
   gl.uniform1f(L.u_penAngR, u.penAngR);
   gl.uniform1f(L.u_umbralMag, u.umbralMag);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+  // the compass, projected onto the horizon each frame
+  const cw = s.root.clientWidth, ch = s.root.clientHeight;
+  for (const letter of ['N', 'E', 'S', 'W']) {
+    const { el, az } = s.points[letter];
+    const dir = dirFromAltAz(1.2 * DEG, az);   // a whisker above the ridge line
+    const f = dir[0] * fwd[0] + dir[1] * fwd[1] + dir[2] * fwd[2];
+    if (f < 0.25) { el.hidden = true; continue; }
+    const sx = (dir[0] * right[0] + dir[1] * right[1] + dir[2] * right[2]) / (f * tanH * aspect);
+    const sy = (dir[0] * up[0] + dir[1] * up[1] + dir[2] * up[2]) / (f * tanH);
+    if (Math.abs(sx) > 1.04 || Math.abs(sy) > 1.04) { el.hidden = true; continue; }
+    el.hidden = false;
+    el.style.transform = `translate(${((sx + 1) / 2 * cw).toFixed(1)}px, ${((1 - sy) / 2 * ch).toFixed(1)}px)`;
+  }
 
   // chrome: only touch the DOM when the words change
   const readout = s.adapter.readout(t);
@@ -777,8 +818,11 @@ function installDebug(s) {
       return [px[0], px[1], px[2]];
     },
     loseContext() {
-      s.gl.getExtension('WEBGL_lose_context')?.loseContext();
-      setTimeout(() => s.gl.getExtension('WEBGL_lose_context')?.restoreContext(), 300);
+      // the extension must be taken before the loss: getExtension on a lost
+      // context returns null, so a fresh lookup could never restore it
+      const ext = s.gl.getExtension('WEBGL_lose_context');
+      ext?.loseContext();
+      setTimeout(() => ext?.restoreContext(), 300);
     },
     close,
   };

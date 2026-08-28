@@ -496,6 +496,28 @@ export function localInstant(el, lat, lon, t) {
 }
 
 /**
+ * Where the Sun stands in the local sky at instant `t`: altitude and true
+ * compass azimuth (degrees from north, eastward). The Besselian axis points
+ * at the Sun to within the lunar parallax, so its declination `d` and hour
+ * angle `mu` are the Sun's for any purpose a horizon view has. Presentation
+ * only, like localInstant.
+ */
+export function localHorizon(el, lat, lon, t) {
+  const st = stateAt(el, t);
+  const phi = lat * DEG;
+  const H = lon * DEG + st.mu - SIDEREAL * el.deltaT * 15 / 3600 * DEG;
+  const sinAlt = Math.sin(phi) * Math.sin(st.d)
+    + Math.cos(phi) * Math.cos(st.d) * Math.cos(H);
+  // measured from south, westward positive; shifted to from-north, eastward
+  const azS = Math.atan2(Math.sin(H),
+    Math.cos(H) * Math.sin(phi) - Math.tan(st.d) * Math.cos(phi));
+  return {
+    altitude: Math.asin(Math.min(1, Math.max(-1, sinAlt))) / DEG,
+    azimuth: ((azS / DEG + 180) % 360 + 360) % 360,
+  };
+}
+
+/**
  * What is seen from lat/lon. Returns null where the eclipse misses the place.
  * Times are TDT hours from the elements' t0; use `toUT` to read them off a clock.
  */
