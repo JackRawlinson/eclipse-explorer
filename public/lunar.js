@@ -49,6 +49,17 @@ export function sublunar(entry, t) {
   return { lat: entry.zenith.lat, lon };
 }
 
+/** True compass azimuth of the Moon: the great-circle bearing from the
+    observer to the point the Moon is overhead. Degrees from north, eastward. */
+export function moonAzimuth(entry, lat, lon, t) {
+  const s = sublunar(entry, t);
+  const dl = (s.lon - lon) * DEG;
+  const az = Math.atan2(Math.sin(dl) * Math.cos(s.lat * DEG),
+    Math.cos(lat * DEG) * Math.sin(s.lat * DEG)
+    - Math.sin(lat * DEG) * Math.cos(s.lat * DEG) * Math.cos(dl));
+  return ((az / DEG) % 360 + 360) % 360;
+}
+
 export function moonAlt(entry, lat, lon, t) {
   const s = sublunar(entry, t);
   const sinAlt = Math.sin(lat * DEG) * Math.sin(s.lat * DEG)
