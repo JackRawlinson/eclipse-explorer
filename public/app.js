@@ -1020,6 +1020,69 @@ function updateEye() {
   host.hidden = false;
 }
 
+// ------------------------------------------------ the view from the ground
+//
+// Pressing the eye disc opens a full-page WebGL simulation (sim.js), loaded
+// only at that moment so it costs ordinary visits nothing. The sim gets its
+// geometry through this adapter -- closures over the same functions the disc
+// itself uses -- so the two can never disagree.
+function simAdapter(resume) {
+  const el = state.elements;
+  const entry = state.current;
+  const pin = { ...state.pin };
+  const win = state.shadowWindow.slice();
+  return {
+    kind: state.kind,
+    pin,
+    window: win,
+    fraction: Number($('tl-scrub').value) / 1000,
+    playing: resume,
+    playRate: () => state.playRate,
+    cyclePlayRate: () => $('tl-speed')?.click(),
+    speedLabel: () => $('tl-speed')?.textContent ?? '1×',
+    marks: () => $('tl-scrub').style.getPropertyValue('--tl-marks'),
+    readout: (t) => state.kind === 'lunar'
+      ? `${clock(entry.date, ((t % 24) + 24) % 24, { seconds: true,
+           reference: ((lunar.geometryOf(entry).g % 24) + 24) % 24 })} ${timeLabel()}`
+      : `${clock(entry.date, toUT(el, t), { seconds: true,
+           reference: toUT(el, (win[0] + win[1]) / 2) })} ${timeLabel()}`,
+    solar: state.kind === 'solar' && el ? {
+      instant: (t) => localInstant(el, pin.lat, pin.lon, t),
+      obscuration: obscurationFrom,
+      circumstances: () => localCircumstances(el, pin.lat, pin.lon),
+    } : null,
+    lunar: state.kind === 'lunar' && entry ? {
+      geometry: () => lunar.geometryOf(entry),
+      phase: (t) => lunar.phaseAt(entry, t),
+      alt: (t) => lunar.moonAlt(entry, pin.lat, pin.lon, t),
+      gamma: entry.gamma,
+    } : null,
+    commit: (fraction, playing) => {
+      $('tl-scrub').value = String(Math.round(fraction * 1000));
+      setShadowAt(fraction);
+      syncUrl({ replace: true });
+      if (playing) startPlaying();
+    },
+    onClose: () => document.body.classList.remove('sim-open'),
+    toast,
+    seed: `${entry?.id || ''}${pin.lat.toFixed(2)}${pin.lon.toFixed(2)}`,
+  };
+}
+
+function openSim() {
+  if (state.liveT === null || !state.pin || !state.shadowWindow) return;
+  const resume = state.playing;
+  stopPlaying();                  // the map does zero work under the overlay
+  document.body.classList.add('sim-open');
+  import('./sim.js')
+    .then((m) => m.open(simAdapter(resume)))
+    .catch((err) => {
+      console.error(err);
+      document.body.classList.remove('sim-open');
+      toast('Could not load the sky view');
+    });
+}
+
 // A real eclipse shadow is neutral, and faithfully drawn it is also nearly
 // invisible: brightness goes as the *uncovered* part of the Sun, so half of it
 // gone is only about a quarter of a dimming, and the last few percent are the
@@ -2215,6 +2278,7 @@ function wirePanels() {
 
 function wireKeys() {
   addEventListener('keydown', (ev) => {
+    if (document.body.classList.contains('sim-open')) return;
     const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(ev.target.tagName);
     if (ev.key === '/' && !typing) { ev.preventDefault(); $('search').focus(); return; }
     if (ev.key === 'Escape' && !$('settings').hidden) { toggleSettings(false); return; }
@@ -2302,6 +2366,7 @@ async function boot() {
   // older than this script, and a missing button must cost that button alone,
   // not every listener wired after the line that would have thrown.
   $('place-close')?.addEventListener('click', () => setPin(null));
+  $('eye-open')?.addEventListener('click', openSim);
   $('place-visible')?.addEventListener('click', showVisibleFromPin);
   const speedLabel = () => `${state.playRate === 0.5 ? '½' : state.playRate}×`;
   const speedBtn = $('tl-speed');

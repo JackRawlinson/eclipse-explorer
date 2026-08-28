@@ -24,6 +24,12 @@
 /circumstances.js
   Cache-Control: no-cache
 
+/lunar.js
+  Cache-Control: no-cache
+
+/sim.js
+  Cache-Control: no-cache
+
 /style.css
   Cache-Control: no-cache
 

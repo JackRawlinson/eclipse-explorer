@@ -111,8 +111,12 @@
           aria-label="Playback speed">1×</button>
 </div>
 
-<!-- What the eclipse looks like from the pinned place, while the shadow runs. -->
+<!-- What the eclipse looks like from the pinned place, while the shadow runs.
+     Pressing the disc opens the full-sky view; the button carries the click so
+     the rest of the element can stay transparent to the map beneath. -->
 <div class="eye" id="eye" role="img" hidden>
+  <button type="button" class="eye__open" id="eye-open"
+          aria-label="Watch from this place — open the full-sky view"></button>
   <canvas id="eye-canvas" width="240" height="240" aria-hidden="true"></canvas>
   <div class="eye__label" id="eye-label"></div>
   <div class="eye__label eye__label--time" id="eye-time"></div>
